@@ -6,10 +6,10 @@
 {% block content %}
 <div class="row mb-4">
     <div class="col-12">
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCategoria">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCategoria" onclick="nuevaCategoria()">
             <i class="bi bi-plus-circle me-2"></i>Nueva Categoría
         </button>
-        <button class="btn btn-success ms-2" data-bs-toggle="modal" data-bs-target="#modalItem">
+        <button class="btn btn-success ms-2" data-bs-toggle="modal" data-bs-target="#modalItem" onclick="nuevoItem()">
             <i class="bi bi-plus-circle me-2"></i>Nuevo Producto
         </button>
     </div>
@@ -46,7 +46,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in categoria_grupo.items %}
+                    {% for item in categoria_grupo['items'] %}
                     <tr>
                         <td><code>{{ item.codigo }}</code></td>
                         <td>
@@ -99,38 +99,39 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Nueva Categoría</h5>
+                <h5 class="modal-title" id="tituloModalCategoria">Nueva Categoría</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="formCategoria">
+                    <input type="hidden" id="categoria_id" name="id">
                     <div class="mb-3">
                         <label class="form-label">Nombre (código)</label>
-                        <input type="text" class="form-control" name="nombre" required>
+                        <input type="text" class="form-control" id="categoria_nombre" name="nombre" required>
                         <small class="text-muted">Ejemplo: entradas, principales, postres</small>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Nombre para mostrar</label>
-                        <input type="text" class="form-control" name="nombre_display" required>
+                        <input type="text" class="form-control" id="categoria_nombre_display" name="nombre_display" required>
                         <small class="text-muted">Ejemplo: Entradas, Platos Principales</small>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Descripción</label>
-                        <textarea class="form-control" name="descripcion" rows="2"></textarea>
+                        <textarea class="form-control" id="categoria_descripcion" name="descripcion" rows="2"></textarea>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Icono (Bootstrap Icons)</label>
-                        <input type="text" class="form-control" name="icono" placeholder="cup-hot, cake, fish">
+                        <input type="text" class="form-control" id="categoria_icono" name="icono" placeholder="cup-hot, cake, fish">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Orden</label>
-                        <input type="number" class="form-control" name="orden" value="0">
+                        <input type="number" class="form-control" id="categoria_orden" name="orden" value="0">
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" onclick="guardarCategoria()">Guardar</button>
+                <button type="button" class="btn btn-primary" id="btnGuardarCategoria" onclick="guardarCategoria()">Guardar</button>
             </div>
         </div>
     </div>
@@ -141,15 +142,16 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Nuevo Producto</h5>
+                <h5 class="modal-title" id="tituloModalItem">Nuevo Producto</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="formItem">
+                    <input type="hidden" id="item_id" name="id">
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Categoría</label>
-                            <select class="form-select" name="categoria_id" required>
+                            <select class="form-select" id="item_categoria_id" name="categoria_id" required>
                                 <option value="">Selecciona...</option>
                                 {% for cat in menu %}
                                 <option value="{{ cat.categoria.id }}">{{ cat.categoria.nombre_display }}</option>
@@ -158,30 +160,30 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Código</label>
-                            <input type="text" class="form-control" name="codigo" required>
+                            <input type="text" class="form-control" id="item_codigo" name="codigo" required>
                         </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Nombre del producto</label>
-                        <input type="text" class="form-control" name="nombre" required>
+                        <input type="text" class="form-control" id="item_nombre" name="nombre" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Descripción</label>
-                        <textarea class="form-control" name="descripcion" rows="3" required></textarea>
+                        <textarea class="form-control" id="item_descripcion" name="descripcion" rows="3" required></textarea>
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Precio</label>
-                            <input type="number" class="form-control" name="precio" step="0.01" required>
+                            <input type="number" class="form-control" id="item_precio" name="precio" step="0.01" required>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Tiempo de preparación</label>
-                            <input type="text" class="form-control" name="tiempo_preparacion" placeholder="15-20 min">
+                            <input type="text" class="form-control" id="item_tiempo_preparacion" name="tiempo_preparacion" placeholder="15-20 min">
                         </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Ingredientes (uno por línea)</label>
-                        <textarea class="form-control" name="ingredientes" rows="3" placeholder="Tomate&#10;Queso mozzarella&#10;Albahaca"></textarea>
+                        <textarea class="form-control" id="item_ingredientes" name="ingredientes" rows="3" placeholder="Tomate&#10;Queso mozzarella&#10;Albahaca"></textarea>
                     </div>
                     <div class="row">
                         <div class="col-md-3 mb-3">
@@ -213,7 +215,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-success" onclick="guardarItem()">Guardar Producto</button>
+                <button type="button" class="btn btn-success" id="btnGuardarItem" onclick="guardarItem()">Guardar Producto</button>
             </div>
         </div>
     </div>
@@ -223,11 +225,66 @@
 
 {% block extra_js %}
 <script>
+// Variable para modo edición
+let modoEdicion = {
+    categoria: false,
+    item: false
+};
+
+// FUNCIONES PARA CATEGORÍAS
+
+function nuevaCategoria() {
+    modoEdicion.categoria = false;
+    document.getElementById('tituloModalCategoria').textContent = 'Nueva Categoría';
+    document.getElementById('btnGuardarCategoria').textContent = 'Guardar';
+    document.getElementById('formCategoria').reset();
+    document.getElementById('categoria_id').value = '';
+}
+
+function editarCategoria(categoriaId) {
+    modoEdicion.categoria = true;
+    document.getElementById('tituloModalCategoria').textContent = 'Editar Categoría';
+    document.getElementById('btnGuardarCategoria').textContent = 'Actualizar';
+    
+    // Cargar datos de la categoría
+    fetch('/api/categoria/' + categoriaId)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const cat = data.categoria;
+                document.getElementById('categoria_id').value = cat.id;
+                document.getElementById('categoria_nombre').value = cat.nombre;
+                document.getElementById('categoria_nombre_display').value = cat.nombre_display;
+                document.getElementById('categoria_descripcion').value = cat.descripcion || '';
+                document.getElementById('categoria_icono').value = cat.icono || '';
+                document.getElementById('categoria_orden').value = cat.orden || 0;
+                
+                // Abrir modal
+                const modal = new bootstrap.Modal(document.getElementById('modalCategoria'));
+                modal.show();
+            } else {
+                alert('Error al cargar la categoría');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al cargar la categoría');
+        });
+}
+
 function guardarCategoria() {
     const form = document.getElementById('formCategoria');
     const formData = new FormData(form);
     const data = Object.fromEntries(formData);
-    data.action = 'crear';
+    
+    if (modoEdicion.categoria) {
+        // Modo edición
+        data.action = 'actualizar';
+        data.id = document.getElementById('categoria_id').value;
+    } else {
+        // Modo creación
+        data.action = 'crear';
+    }
     
     fetch('/menu/categorias', {
         method: 'POST',
@@ -237,7 +294,7 @@ function guardarCategoria() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Categoría creada exitosamente');
+            alert(modoEdicion.categoria ? 'Categoría actualizada exitosamente' : 'Categoría creada exitosamente');
             location.reload();
         } else {
             alert('Error: ' + data.message);
@@ -245,8 +302,86 @@ function guardarCategoria() {
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Error al crear categoría');
+        alert('Error al guardar categoría');
     });
+}
+
+function eliminarCategoria(categoriaId) {
+    if (confirm('¿Estás seguro de eliminar esta categoría? Se desactivará pero no se borrarán los productos.')) {
+        fetch('/menu/categorias', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action: 'eliminar',
+                id: categoriaId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Categoría eliminada');
+                location.reload();
+            } else {
+                alert('Error al eliminar');
+            }
+        });
+    }
+}
+
+// FUNCIONES PARA ITEMS
+
+function nuevoItem() {
+    modoEdicion.item = false;
+    document.getElementById('tituloModalItem').textContent = 'Nuevo Producto';
+    document.getElementById('btnGuardarItem').textContent = 'Guardar Producto';
+    document.getElementById('formItem').reset();
+    document.getElementById('item_id').value = '';
+    document.getElementById('disponible').checked = true;
+}
+
+function editarItem(itemId) {
+    modoEdicion.item = true;
+    document.getElementById('tituloModalItem').textContent = 'Editar Producto';
+    document.getElementById('btnGuardarItem').textContent = 'Actualizar Producto';
+    
+    // Cargar datos del item
+    fetch('/api/item/' + itemId)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const item = data.item;
+                document.getElementById('item_id').value = item.id;
+                document.getElementById('item_categoria_id').value = item.categoria_id;
+                document.getElementById('item_codigo').value = item.codigo;
+                document.getElementById('item_nombre').value = item.nombre;
+                document.getElementById('item_descripcion').value = item.descripcion;
+                document.getElementById('item_precio').value = item.precio;
+                document.getElementById('item_tiempo_preparacion').value = item.tiempo_preparacion || '';
+                
+                // Ingredientes como texto separado por líneas
+                if (item.ingredientes && item.ingredientes.length > 0) {
+                    document.getElementById('item_ingredientes').value = item.ingredientes.join('\n');
+                } else {
+                    document.getElementById('item_ingredientes').value = '';
+                }
+                
+                // Checkboxes
+                document.getElementById('disponible').checked = item.disponible;
+                document.getElementById('vegano').checked = item.vegano;
+                document.getElementById('vegetariano').checked = item.vegetariano;
+                document.getElementById('sin_gluten').checked = item.sin_gluten;
+                
+                // Abrir modal
+                const modal = new bootstrap.Modal(document.getElementById('modalItem'));
+                modal.show();
+            } else {
+                alert('Error al cargar el producto');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al cargar el producto');
+        });
 }
 
 function guardarItem() {
@@ -265,24 +400,49 @@ function guardarItem() {
     data.vegetariano = document.getElementById('vegetariano').checked;
     data.sin_gluten = document.getElementById('sin_gluten').checked;
     
-    fetch('/menu/items', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('Producto creado exitosamente');
-            location.reload();
-        } else {
-            alert('Error: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('Error al crear producto');
-    });
+    if (modoEdicion.item) {
+        // Modo edición - PUT
+        data.id = document.getElementById('item_id').value;
+        
+        fetch('/menu/items', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Producto actualizado exitosamente');
+                location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al actualizar producto');
+        });
+    } else {
+        // Modo creación - POST
+        fetch('/menu/items', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Producto creado exitosamente');
+                location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al crear producto');
+        });
+    }
 }
 
 function toggleDisponibilidad(itemId, disponibleActual) {
@@ -321,36 +481,6 @@ function eliminarItem(itemId) {
             }
         });
     }
-}
-
-function eliminarCategoria(categoriaId) {
-    if (confirm('¿Estás seguro de eliminar esta categoría? Se desactivará pero no se borrarán los productos.')) {
-        fetch('/menu/categorias', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                action: 'eliminar',
-                id: categoriaId
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('Categoría eliminada');
-                location.reload();
-            } else {
-                alert('Error al eliminar');
-            }
-        });
-    }
-}
-
-function editarItem(itemId) {
-    alert('Función de edición próximamente');
-}
-
-function editarCategoria(categoriaId) {
-    alert('Función de edición próximamente');
 }
 </script>
 {% endblock %}
