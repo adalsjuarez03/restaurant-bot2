@@ -255,6 +255,29 @@ def gestionar_items():
     
     return jsonify({'success': True, 'items': items})
 
+@app.route('/api/categoria/<int:categoria_id>', methods=['GET'])
+@login_required
+def get_categoria(categoria_id):
+    """Obtener datos de una categoría específica"""
+    categoria = db.get_categoria_by_id(categoria_id)
+    
+    if categoria:
+        return jsonify({'success': True, 'categoria': categoria})
+    return jsonify({'success': False, 'message': 'Categoría no encontrada'}), 404
+
+@app.route('/api/item/<int:item_id>', methods=['GET'])
+@login_required
+def get_item(item_id):
+    """Obtener datos de un item específico"""
+    item = db.get_item_by_id(item_id)
+    
+    if item:
+        # Obtener ingredientes también
+        ingredientes = db.get_ingredientes_item(item_id)
+        item['ingredientes'] = ingredientes
+        return jsonify({'success': True, 'item': item})
+    return jsonify({'success': False, 'message': 'Item no encontrado'}), 404
+
 # ==================== GESTIÓN DE PEDIDOS ====================
 
 @app.route('/pedidos')

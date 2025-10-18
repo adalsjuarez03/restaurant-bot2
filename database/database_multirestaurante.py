@@ -280,7 +280,7 @@ class DatabaseManager:
     
     @staticmethod
     def eliminar_categoria(categoria_id):
-        """Eliminar (desactivar) una categoría"""
+        """Eliminar (desactivar) una categoría - SOLO DESACTIVA, no borra"""
         try:
             with get_db_cursor() as (cursor, conn):
                 cursor.execute("""
@@ -310,6 +310,34 @@ class DatabaseManager:
         except Error as e:
             print(f"❌ Error obteniendo items: {e}")
             return []
+    
+    @staticmethod
+    def get_categoria_by_id(categoria_id):
+        """Obtener una categoría por su ID"""
+        try:
+            with get_db_cursor() as (cursor, conn):
+                cursor.execute("""
+                    SELECT * FROM categorias_menu 
+                    WHERE id = %s
+                """, (categoria_id,))
+                return cursor.fetchone()
+        except Error as e:
+            print(f"❌ Error obteniendo categoría: {e}")
+            return None
+    
+    @staticmethod
+    def get_item_by_id(item_id):
+        """Obtener un item por su ID"""
+        try:
+            with get_db_cursor() as (cursor, conn):
+                cursor.execute("""
+                    SELECT * FROM items_menu 
+                    WHERE id = %s
+                """, (item_id,))
+                return cursor.fetchone()
+        except Error as e:
+            print(f"❌ Error obteniendo item: {e}")
+            return None
     
     @staticmethod
     def get_item_por_codigo(restaurante_id, codigo):
@@ -385,14 +413,21 @@ class DatabaseManager:
     
     @staticmethod
     def eliminar_item_menu(item_id):
-        """Eliminar (desactivar) un item del menú"""
+        """Eliminar COMPLETAMENTE un item del menú (borrado físico)"""
         try:
             with get_db_cursor() as (cursor, conn):
+                # Primero eliminar ingredientes relacionados
                 cursor.execute("""
-                    UPDATE items_menu 
-                    SET disponible = FALSE 
+                    DELETE FROM ingredientes 
+                    WHERE item_id = %s
+                """, (item_id,))
+                
+                # Luego eliminar el item
+                cursor.execute("""
+                    DELETE FROM items_menu 
                     WHERE id = %s
                 """, (item_id,))
+                
                 conn.commit()
                 return True
         except Error as e:
