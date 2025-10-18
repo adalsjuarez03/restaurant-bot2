@@ -1,0 +1,356 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Gestión de Menú{% endblock %}
+{% block page_title %}Gestión de Menú{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCategoria">
+            <i class="bi bi-plus-circle me-2"></i>Nueva Categoría
+        </button>
+        <button class="btn btn-success ms-2" data-bs-toggle="modal" data-bs-target="#modalItem">
+            <i class="bi bi-plus-circle me-2"></i>Nuevo Producto
+        </button>
+    </div>
+</div>
+
+<!-- Categorías y Productos -->
+{% for categoria_grupo in menu %}
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="bi bi-{{ categoria_grupo.categoria.icono or 'list' }} me-2"></i>
+            {{ categoria_grupo.categoria.nombre_display }}
+        </h5>
+        <div>
+            <button class="btn btn-sm btn-outline-primary" onclick="editarCategoria({{ categoria_grupo.categoria.id }})">
+                <i class="bi bi-pencil"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger" onclick="eliminarCategoria({{ categoria_grupo.categoria.id }})">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Precio</th>
+                        <th>Descripción</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in categoria_grupo.items %}
+                    <tr>
+                        <td><code>{{ item.codigo }}</code></td>
+                        <td>
+                            <strong>{{ item.nombre }}</strong>
+                            {% if item.vegano %}<span class="badge bg-success">🌱</span>{% endif %}
+                            {% if item.vegetariano %}<span class="badge bg-info">🥬</span>{% endif %}
+                        </td>
+                        <td><strong>${{ "%.2f"|format(item.precio) }}</strong></td>
+                        <td><small>{{ item.descripcion[:50] }}...</small></td>
+                        <td>
+                            {% if item.disponible %}
+                                <span class="badge bg-success">Disponible</span>
+                            {% else %}
+                                <span class="badge bg-danger">No disponible</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editarItem({{ item.id }})">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-warning" onclick="toggleDisponibilidad({{ item.id }}, {{ item.disponible|tojson }})">
+                                <i class="bi bi-toggle-{{ 'on' if item.disponible else 'off' }}"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="eliminarItem({{ item.id }})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-3">
+                            No hay productos en esta categoría
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle me-2"></i>
+    No hay categorías creadas. Comienza creando una categoría para tu menú.
+</div>
+{% endfor %}
+
+<!-- Modal Categoría -->
+<div class="modal fade" id="modalCategoria" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nueva Categoría</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formCategoria">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre (código)</label>
+                        <input type="text" class="form-control" name="nombre" required>
+                        <small class="text-muted">Ejemplo: entradas, principales, postres</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nombre para mostrar</label>
+                        <input type="text" class="form-control" name="nombre_display" required>
+                        <small class="text-muted">Ejemplo: Entradas, Platos Principales</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descripción</label>
+                        <textarea class="form-control" name="descripcion" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Icono (Bootstrap Icons)</label>
+                        <input type="text" class="form-control" name="icono" placeholder="cup-hot, cake, fish">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Orden</label>
+                        <input type="number" class="form-control" name="orden" value="0">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarCategoria()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Item -->
+<div class="modal fade" id="modalItem" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nuevo Producto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formItem">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Categoría</label>
+                            <select class="form-select" name="categoria_id" required>
+                                <option value="">Selecciona...</option>
+                                {% for cat in menu %}
+                                <option value="{{ cat.categoria.id }}">{{ cat.categoria.nombre_display }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Código</label>
+                            <input type="text" class="form-control" name="codigo" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Nombre del producto</label>
+                        <input type="text" class="form-control" name="nombre" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descripción</label>
+                        <textarea class="form-control" name="descripcion" rows="3" required></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Precio</label>
+                            <input type="number" class="form-control" name="precio" step="0.01" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tiempo de preparación</label>
+                            <input type="text" class="form-control" name="tiempo_preparacion" placeholder="15-20 min">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Ingredientes (uno por línea)</label>
+                        <textarea class="form-control" name="ingredientes" rows="3" placeholder="Tomate&#10;Queso mozzarella&#10;Albahaca"></textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="disponible" id="disponible" checked>
+                                <label class="form-check-label" for="disponible">Disponible</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="vegano" id="vegano">
+                                <label class="form-check-label" for="vegano">Vegano 🌱</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="vegetariano" id="vegetariano">
+                                <label class="form-check-label" for="vegetariano">Vegetariano 🥬</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="sin_gluten" id="sin_gluten">
+                                <label class="form-check-label" for="sin_gluten">Sin Gluten</label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="guardarItem()">Guardar Producto</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function guardarCategoria() {
+    const form = document.getElementById('formCategoria');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+    data.action = 'crear';
+    
+    fetch('/menu/categorias', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Categoría creada exitosamente');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al crear categoría');
+    });
+}
+
+function guardarItem() {
+    const form = document.getElementById('formItem');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+    
+    // Convertir ingredientes de texto a array
+    if (data.ingredientes) {
+        data.ingredientes = data.ingredientes.split('\n').filter(i => i.trim());
+    }
+    
+    // Convertir checkboxes
+    data.disponible = document.getElementById('disponible').checked;
+    data.vegano = document.getElementById('vegano').checked;
+    data.vegetariano = document.getElementById('vegetariano').checked;
+    data.sin_gluten = document.getElementById('sin_gluten').checked;
+    
+    fetch('/menu/items', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Producto creado exitosamente');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error al crear producto');
+    });
+}
+
+function toggleDisponibilidad(itemId, disponibleActual) {
+    const nuevoEstado = !disponibleActual;
+    
+    fetch('/menu/items', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            id: itemId,
+            disponible: nuevoEstado
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error al cambiar disponibilidad');
+        }
+    });
+}
+
+function eliminarItem(itemId) {
+    if (confirm('¿Estás seguro de eliminar este producto?')) {
+        fetch('/menu/items?id=' + itemId, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Producto eliminado');
+                location.reload();
+            } else {
+                alert('Error al eliminar');
+            }
+        });
+    }
+}
+
+function eliminarCategoria(categoriaId) {
+    if (confirm('¿Estás seguro de eliminar esta categoría? Se desactivará pero no se borrarán los productos.')) {
+        fetch('/menu/categorias', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                action: 'eliminar',
+                id: categoriaId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Categoría eliminada');
+                location.reload();
+            } else {
+                alert('Error al eliminar');
+            }
+        });
+    }
+}
+
+function editarItem(itemId) {
+    alert('Función de edición próximamente');
+}
+
+function editarCategoria(categoriaId) {
+    alert('Función de edición próximamente');
+}
+</script>
+{% endblock %}

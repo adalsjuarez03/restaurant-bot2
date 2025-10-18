@@ -1,0 +1,525 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Gestión de Reservaciones{% endblock %}
+{% block page_title %}Gestión de Reservaciones{% endblock %}
+
+{% block content %}
+<!-- Botones de Acción -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalReservacion">
+            <i class="bi bi-plus-circle me-2"></i>Nueva Reservación
+        </button>
+    </div>
+    <div class="col-md-6 text-end">
+        <div class="btn-group">
+            <button class="btn btn-outline-secondary active" onclick="cambiarVista('lista')">
+                <i class="bi bi-list-ul"></i> Lista
+            </button>
+            <button class="btn btn-outline-secondary" onclick="cambiarVista('calendario')">
+                <i class="bi bi-calendar3"></i> Calendario
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Estadísticas -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 bg-primary bg-opacity-10">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="rounded-circle bg-primary p-3">
+                            <i class="bi bi-calendar-check text-white" style="font-size: 24px;"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="mb-1 text-muted">Hoy</h6>
+                        <h3 class="mb-0">{{ stats.hoy or 0 }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-0 bg-warning bg-opacity-10">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="rounded-circle bg-warning p-3">
+                            <i class="bi bi-clock-history text-white" style="font-size: 24px;"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="mb-1 text-muted">Pendientes</h6>
+                        <h3 class="mb-0">{{ stats.pendientes or 0 }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-0 bg-success bg-opacity-10">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="rounded-circle bg-success p-3">
+                            <i class="bi bi-check-circle text-white" style="font-size: 24px;"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="mb-1 text-muted">Confirmadas</h6>
+                        <h3 class="mb-0">{{ stats.confirmadas or 0 }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card border-0 bg-info bg-opacity-10">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="rounded-circle bg-info p-3">
+                            <i class="bi bi-people text-white" style="font-size: 24px;"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="mb-1 text-muted">Personas Hoy</h6>
+                        <h3 class="mb-0">{{ stats.personas_hoy or 0 }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="input-group">
+            <span class="input-group-text bg-white">
+                <i class="bi bi-search"></i>
+            </span>
+            <input type="text" class="form-control" id="searchReservaciones" placeholder="Buscar por nombre, teléfono...">
+        </div>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="filtroEstado" onchange="filtrarReservaciones()">
+            <option value="">Todos los estados</option>
+            <option value="pendiente">Pendientes</option>
+            <option value="confirmada">Confirmadas</option>
+            <option value="en_curso">En curso</option>
+            <option value="completada">Completadas</option>
+            <option value="cancelada">Canceladas</option>
+            <option value="no_show">No Show</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <input type="date" class="form-control" id="filtroFecha" onchange="filtrarReservaciones()">
+    </div>
+    <div class="col-md-2">
+        <button class="btn btn-outline-secondary w-100" onclick="limpiarFiltros()">
+            <i class="bi bi-x-circle me-2"></i>Limpiar
+        </button>
+    </div>
+</div>
+
+<!-- Vista de Lista -->
+<div id="vistaLista">
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Código</th>
+                            <th>Cliente</th>
+                            <th>Contacto</th>
+                            <th>Fecha y Hora</th>
+                            <th>Personas</th>
+                            <th>Mesa</th>
+                            <th>Estado</th>
+                            <th>Origen</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for reservacion in reservaciones %}
+                        <tr class="reservacion-row" 
+                            data-estado="{{ reservacion.estado }}" 
+                            data-fecha="{{ reservacion.fecha_reservacion }}">
+                            <td>
+                                <code class="text-primary">{{ reservacion.codigo_reservacion[:8] }}</code>
+                            </td>
+                            <td>
+                                <div>
+                                    <strong>{{ reservacion.nombre_cliente }}</strong>
+                                    {% if reservacion.ocasion_especial %}
+                                    <br>
+                                    <small class="text-muted">
+                                        <i class="bi bi-star"></i> {{ reservacion.ocasion_especial }}
+                                    </small>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <small>
+                                    <i class="bi bi-telephone"></i> {{ reservacion.telefono }}
+                                    {% if reservacion.email %}
+                                    <br>
+                                    <i class="bi bi-envelope"></i> {{ reservacion.email }}
+                                    {% endif %}
+                                </small>
+                            </td>
+                            <td>
+                                <div>
+                                    <i class="bi bi-calendar"></i> {{ reservacion.fecha_reservacion.strftime('%d/%m/%Y') }}
+                                    <br>
+                                    <i class="bi bi-clock"></i> {{ reservacion.hora_reservacion.strftime('%H:%M') }}
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-secondary">
+                                    <i class="bi bi-people"></i> {{ reservacion.numero_personas }}
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                {% if reservacion.numero_mesa %}
+                                    <span class="badge bg-info">Mesa {{ reservacion.numero_mesa }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if reservacion.estado == 'pendiente' %}
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="bi bi-clock-history"></i> Pendiente
+                                    </span>
+                                {% elif reservacion.estado == 'confirmada' %}
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-check-circle"></i> Confirmada
+                                    </span>
+                                {% elif reservacion.estado == 'en_curso' %}
+                                    <span class="badge bg-primary">
+                                        <i class="bi bi-hourglass-split"></i> En curso
+                                    </span>
+                                {% elif reservacion.estado == 'completada' %}
+                                    <span class="badge bg-info">
+                                        <i class="bi bi-check-all"></i> Completada
+                                    </span>
+                                {% elif reservacion.estado == 'cancelada' %}
+                                    <span class="badge bg-danger">
+                                        <i class="bi bi-x-circle"></i> Cancelada
+                                    </span>
+                                {% elif reservacion.estado == 'no_show' %}
+                                    <span class="badge bg-dark">
+                                        <i class="bi bi-person-x"></i> No Show
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark">
+                                    <i class="bi bi-{{ 'telegram' if reservacion.origen == 'telegram' else 'globe' if reservacion.origen == 'web' else 'telephone' }}"></i>
+                                    {{ reservacion.origen|title }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary" 
+                                            onclick="verDetalleReservacion({{ reservacion.id }})"
+                                            title="Ver detalle">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    {% if reservacion.estado == 'pendiente' %}
+                                    <button class="btn btn-outline-success" 
+                                            onclick="confirmarReservacion({{ reservacion.id }})"
+                                            title="Confirmar">
+                                        <i class="bi bi-check"></i>
+                                    </button>
+                                    {% elif reservacion.estado == 'confirmada' %}
+                                    <button class="btn btn-outline-info" 
+                                            onclick="iniciarReservacion({{ reservacion.id }})"
+                                            title="Iniciar">
+                                        <i class="bi bi-play"></i>
+                                    </button>
+                                    {% elif reservacion.estado == 'en_curso' %}
+                                    <button class="btn btn-outline-success" 
+                                            onclick="completarReservacion({{ reservacion.id }})"
+                                            title="Completar">
+                                        <i class="bi bi-check-all"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% if reservacion.estado not in ['completada', 'cancelada', 'no_show'] %}
+                                    <button class="btn btn-outline-danger" 
+                                            onclick="cancelarReservacion({{ reservacion.id }})"
+                                            title="Cancelar">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center py-5 text-muted">
+                                <i class="bi bi-calendar-x" style="font-size: 64px;"></i>
+                                <p class="mt-3 mb-0">No hay reservaciones registradas</p>
+                                <small>Las reservaciones aparecerán aquí</small>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nueva Reservación -->
+<div class="modal fade" id="modalReservacion" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nueva Reservación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formReservacion">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Nombre del Cliente *</label>
+                            <input type="text" class="form-control" name="nombre_cliente" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Teléfono *</label>
+                            <input type="tel" class="form-control" name="telefono" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email (opcional)</label>
+                        <input type="email" class="form-control" name="email">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Fecha *</label>
+                            <input type="date" class="form-control" name="fecha_reservacion" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Hora *</label>
+                            <input type="time" class="form-control" name="hora_reservacion" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Número de Personas *</label>
+                            <input type="number" class="form-control" name="numero_personas" min="1" value="2" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Mesa (opcional)</label>
+                            <select class="form-select" name="numero_mesa">
+                                <option value="">Asignar después</option>
+                                {% for i in range(1, 21) %}
+                                <option value="{{ i }}">Mesa {{ i }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Ocasión Especial (opcional)</label>
+                        <select class="form-select" name="ocasion_especial">
+                            <option value="">Ninguna</option>
+                            <option value="Cumpleaños">Cumpleaños</option>
+                            <option value="Aniversario">Aniversario</option>
+                            <option value="Cita Romántica">Cita Romántica</option>
+                            <option value="Negocio">Reunión de Negocios</option>
+                            <option value="Celebración">Celebración</option>
+                            <option value="Otro">Otro</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notas Especiales</label>
+                        <textarea class="form-control" name="notas_especiales" rows="3" placeholder="Alergias, preferencias de ubicación, etc."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarReservacion()">
+                    <i class="bi bi-save me-2"></i>Guardar Reservación
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Detalle Reservación -->
+<div class="modal fade" id="modalDetalle" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Detalle de Reservación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detalleReservacion">
+                <!-- Se llenará dinámicamente -->
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Búsqueda
+document.getElementById('searchReservaciones').addEventListener('keyup', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const rows = document.querySelectorAll('.reservacion-row');
+    
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(searchTerm) ? '' : 'none';
+    });
+});
+
+// Filtrar
+function filtrarReservaciones() {
+    const estado = document.getElementById('filtroEstado').value;
+    const fecha = document.getElementById('filtroFecha').value;
+    const rows = document.querySelectorAll('.reservacion-row');
+    
+    rows.forEach(row => {
+        let mostrar = true;
+        
+        if (estado && row.dataset.estado !== estado) {
+            mostrar = false;
+        }
+        
+        if (fecha && row.dataset.fecha !== fecha) {
+            mostrar = false;
+        }
+        
+        row.style.display = mostrar ? '' : 'none';
+    });
+}
+
+function limpiarFiltros() {
+    document.getElementById('filtroEstado').value = '';
+    document.getElementById('filtroFecha').value = '';
+    document.getElementById('searchReservaciones').value = '';
+    
+    document.querySelectorAll('.reservacion-row').forEach(row => {
+        row.style.display = '';
+    });
+}
+
+// Guardar reservación
+function guardarReservacion() {
+    const form = document.getElementById('formReservacion');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+    
+    fetch('/reservaciones', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Reservación creada exitosamente');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    });
+}
+
+// Acciones rápidas
+function confirmarReservacion(id) {
+    actualizarEstadoReservacion(id, 'confirmada');
+}
+
+function iniciarReservacion(id) {
+    actualizarEstadoReservacion(id, 'en_curso');
+}
+
+function completarReservacion(id) {
+    actualizarEstadoReservacion(id, 'completada');
+}
+
+function cancelarReservacion(id) {
+    if (confirm('¿Cancelar esta reservación?')) {
+        actualizarEstadoReservacion(id, 'cancelada');
+    }
+}
+
+function actualizarEstadoReservacion(id, nuevoEstado) {
+    fetch(`/reservaciones/${id}/estado`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ estado: nuevoEstado })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error al actualizar');
+        }
+    });
+}
+
+function verDetalleReservacion(id) {
+    fetch(`/reservaciones/${id}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const reservacion = data.reservacion;
+            document.getElementById('detalleReservacion').innerHTML = `
+                <div class="mb-3">
+                    <label class="text-muted small">Código:</label>
+                    <div class="fw-bold">${reservacion.codigo_reservacion}</div>
+                </div>
+                <div class="mb-3">
+                    <label class="text-muted small">Cliente:</label>
+                    <div class="fw-bold">${reservacion.nombre_cliente}</div>
+                </div>
+                <div class="mb-3">
+                    <label class="text-muted small">Fecha y Hora:</label>
+                    <div class="fw-bold">${reservacion.fecha_reservacion} ${reservacion.hora_reservacion}</div>
+                </div>
+                <div class="mb-3">
+                    <label class="text-muted small">Personas:</label>
+                    <div class="fw-bold">${reservacion.numero_personas}</div>
+                </div>
+                ${reservacion.notas_especiales ? `
+                <div class="mb-3">
+                    <label class="text-muted small">Notas:</label>
+                    <div>${reservacion.notas_especiales}</div>
+                </div>
+                ` : ''}
+            `;
+            
+            const modal = new bootstrap.Modal(document.getElementById('modalDetalle'));
+            modal.show();
+        }
+    });
+}
+
+function cambiarVista(vista) {
+    // Por ahora solo lista, calendario próximamente
+    alert('Vista de calendario próximamente');
+}
+
+// Auto-refresh cada 60 segundos
+setInterval(() => {
+    location.reload();
+}, 60000);
+</script>
+{% endblock %}

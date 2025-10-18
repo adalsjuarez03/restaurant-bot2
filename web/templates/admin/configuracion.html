@@ -1,0 +1,656 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Configuración{% endblock %}
+{% block page_title %}Configuración del Restaurante{% endblock %}
+
+{% block content %}
+<!-- Tabs de Configuración -->
+<ul class="nav nav-tabs mb-4" id="configTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button">
+            <i class="bi bi-gear me-2"></i>General
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="delivery-tab" data-bs-toggle="tab" data-bs-target="#delivery" type="button">
+            <i class="bi bi-truck me-2"></i>Delivery
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="horarios-tab" data-bs-toggle="tab" data-bs-target="#horarios" type="button">
+            <i class="bi bi-clock me-2"></i>Horarios
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="telegram-tab" data-bs-toggle="tab" data-bs-target="#telegram" type="button">
+            <i class="bi bi-telegram me-2"></i>Telegram
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="usuarios-tab" data-bs-toggle="tab" data-bs-target="#usuarios" type="button">
+            <i class="bi bi-people me-2"></i>Usuarios
+        </button>
+    </li>
+</ul>
+
+<!-- Contenido de Tabs -->
+<div class="tab-content" id="configTabContent">
+    <!-- Tab General -->
+    <div class="tab-pane fade show active" id="general">
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Información del Restaurante</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="formGeneral">
+                            <div class="mb-3">
+                                <label class="form-label">Nombre del Restaurante *</label>
+                                <input type="text" class="form-control" name="nombre_restaurante" 
+                                       value="{{ restaurante.nombre_restaurante }}" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Slug (URL única) *</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">tuapp.com/</span>
+                                    <input type="text" class="form-control" name="slug" 
+                                           value="{{ restaurante.slug }}" required>
+                                </div>
+                                <small class="text-muted">Solo letras minúsculas, números y guiones</small>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Descripción</label>
+                                <textarea class="form-control" name="descripcion" rows="3">{{ restaurante.descripcion }}</textarea>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Teléfono</label>
+                                    <input type="tel" class="form-control" name="telefono" 
+                                           value="{{ restaurante.telefono }}">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Email</label>
+                                    <input type="email" class="form-control" name="email" 
+                                           value="{{ restaurante.email }}">
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Dirección</label>
+                                <input type="text" class="form-control" name="direccion" 
+                                       value="{{ restaurante.direccion }}">
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Ciudad</label>
+                                    <input type="text" class="form-control" name="ciudad" 
+                                           value="{{ restaurante.ciudad }}">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Estado</label>
+                                    <input type="text" class="form-control" name="estado_republica" 
+                                           value="{{ restaurante.estado_republica }}">
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Código Postal</label>
+                                <input type="text" class="form-control" name="codigo_postal" 
+                                       value="{{ restaurante.codigo_postal }}">
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-save me-2"></i>Guardar Cambios
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4">
+                <!-- Personalización Visual -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h6 class="mb-0">Personalización Visual</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Logo URL</label>
+                            <input type="url" class="form-control form-control-sm" 
+                                   name="logo_url" value="{{ restaurante.logo_url }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Banner URL</label>
+                            <input type="url" class="form-control form-control-sm" 
+                                   name="banner_url" value="{{ restaurante.banner_url }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Color Primario</label>
+                            <input type="color" class="form-control form-control-color w-100" 
+                                   name="color_primario" value="{{ restaurante.color_primario or '#667eea' }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Color Secundario</label>
+                            <input type="color" class="form-control form-control-color w-100" 
+                                   name="color_secundario" value="{{ restaurante.color_secundario or '#764ba2' }}">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Plan Actual -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">Plan Actual</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-center mb-3">
+                            <span class="badge bg-primary" style="font-size: 18px; padding: 10px 20px;">
+                                {{ restaurante.plan|upper }}
+                            </span>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted">Estado:</small>
+                            <div>
+                                <span class="badge bg-{{ 'success' if restaurante.estado == 'activo' else 'warning' }}">
+                                    {{ restaurante.estado|title }}
+                                </span>
+                            </div>
+                        </div>
+                        {% if restaurante.fecha_expiracion %}
+                        <div class="mb-2">
+                            <small class="text-muted">Expira:</small>
+                            <div>{{ restaurante.fecha_expiracion.strftime('%d/%m/%Y') }}</div>
+                        </div>
+                        {% endif %}
+                        <div class="mb-2">
+                            <small class="text-muted">Límite Productos:</small>
+                            <div>
+                                {% if restaurante.limite_productos == -1 %}
+                                    Ilimitado
+                                {% else %}
+                                    {{ restaurante.limite_productos }}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tab Delivery -->
+    <div class="tab-pane fade" id="delivery">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Configuración de Delivery</h5>
+            </div>
+            <div class="card-body">
+                <form id="formDelivery">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">¿Ofreces delivery?</label>
+                            <select class="form-select" name="delivery_activo">
+                                <option value="true">Sí</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Costo de Envío Base</label>
+                            <input type="number" class="form-control" name="costo_envio_base" 
+                                   step="0.01" value="0.00">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Pedido Mínimo para Delivery</label>
+                            <input type="number" class="form-control" name="pedido_minimo" 
+                                   step="0.01" value="100.00">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Envío Gratis Desde</label>
+                            <input type="number" class="form-control" name="envio_gratis_desde" 
+                                   step="0.01" value="300.00">
+                            <small class="text-muted">0 para desactivar</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Radio de Cobertura (km)</label>
+                        <input type="number" class="form-control" name="radio_cobertura" 
+                               step="0.1" value="5.0">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Tiempo Estimado de Entrega</label>
+                        <input type="text" class="form-control" name="tiempo_entrega" 
+                               value="30-45 minutos" placeholder="30-45 minutos">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Zonas de Cobertura (una por línea)</label>
+                        <textarea class="form-control" name="zonas_cobertura" rows="5" 
+                                  placeholder="Centro&#10;Zona Norte&#10;Fraccionamiento Las Palmas"></textarea>
+                        <small class="text-muted">Lista de colonias o zonas donde entregas</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save me-2"></i>Guardar Configuración
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tab Horarios -->
+    <div class="tab-pane fade" id="horarios">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Horarios de Atención</h5>
+            </div>
+            <div class="card-body">
+                <form id="formHorarios">
+                    {% for dia in ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'] %}
+                    <div class="row align-items-center mb-3 pb-3 border-bottom">
+                        <div class="col-md-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" 
+                                       name="activo_{{ dia }}" id="activo_{{ dia }}" checked>
+                                <label class="form-check-label fw-bold" for="activo_{{ dia }}">
+                                    {{ dia|title }}
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Apertura</label>
+                            <input type="time" class="form-control" name="apertura_{{ dia }}" value="09:00">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Cierre</label>
+                            <input type="time" class="form-control" name="cierre_{{ dia }}" value="22:00">
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-check mt-4">
+                                <input class="form-check-input" type="checkbox" 
+                                       name="24h_{{ dia }}" id="24h_{{ dia }}">
+                                <label class="form-check-label small" for="24h_{{ dia }}">
+                                    24 horas
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    <div class="alert alert-info mt-3">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Desmarca el checkbox de un día si permaneces cerrado ese día
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save me-2"></i>Guardar Horarios
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tab Telegram -->
+    <div class="tab-pane fade" id="telegram">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Integración con Telegram</h5>
+            </div>
+            <div class="card-body">
+                <form id="formTelegram">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>¿Cómo obtener tu Bot Token?</strong><br>
+                        1. Abre Telegram y busca <strong>@BotFather</strong><br>
+                        2. Envía el comando <code>/newbot</code><br>
+                        3. Sigue las instrucciones y copia el token que te da<br>
+                        4. Pégalo aquí abajo
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Bot Token *</label>
+                        <input type="text" class="form-control" name="bot_token" 
+                               value="{{ restaurante.bot_token }}"
+                               placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz">
+                        <small class="text-muted">Token de tu bot de Telegram</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Admin ID (opcional)</label>
+                        <input type="number" class="form-control" name="telegram_admin_id" 
+                               value="{{ restaurante.telegram_admin_id }}">
+                        <small class="text-muted">
+                            Tu Telegram User ID. Usa <strong>@userinfobot</strong> para obtenerlo
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Group ID (opcional)</label>
+                        <input type="number" class="form-control" name="telegram_group_id" 
+                               value="{{ restaurante.telegram_group_id }}">
+                        <small class="text-muted">ID del grupo donde recibirás notificaciones</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                   name="notificar_pedidos" id="notificar_pedidos" checked>
+                            <label class="form-check-label" for="notificar_pedidos">
+                                Notificar nuevos pedidos por Telegram
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" 
+                                   name="notificar_reservaciones" id="notificar_reservaciones" checked>
+                            <label class="form-check-label" for="notificar_reservaciones">
+                                Notificar nuevas reservaciones por Telegram
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save me-2"></i>Guardar Configuración
+                        </button>
+                        <button type="button" class="btn btn-success" onclick="probarBot()">
+                            <i class="bi bi-play-circle me-2"></i>Probar Conexión
+                        </button>
+                    </div>
+                </form>
+                
+                <hr class="my-4">
+                
+                <div class="alert alert-success" id="statusBot" style="display: none;">
+                    <i class="bi bi-check-circle me-2"></i>
+                    Bot conectado correctamente
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tab Usuarios -->
+    <div class="tab-pane fade" id="usuarios">
+        <div class="row mb-4">
+            <div class="col-12">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalUsuario">
+                    <i class="bi bi-plus-circle me-2"></i>Nuevo Usuario
+                </button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Usuarios del Sistema</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Email</th>
+                                <th>Rol</th>
+                                <th>Teléfono</th>
+                                <th>Estado</th>
+                                <th>Último Acceso</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for usuario in usuarios %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="rounded-circle bg-primary bg-opacity-10 p-2 me-2">
+                                            <i class="bi bi-person text-primary"></i>
+                                        </div>
+                                        <strong>{{ usuario.nombre_completo }}</strong>
+                                    </div>
+                                </td>
+                                <td>{{ usuario.email }}</td>
+                                <td>
+                                    {% if usuario.rol == 'owner' %}
+                                        <span class="badge bg-danger">Owner</span>
+                                    {% elif usuario.rol == 'admin' %}
+                                        <span class="badge bg-primary">Admin</span>
+                                    {% elif usuario.rol == 'staff' %}
+                                        <span class="badge bg-info">Staff</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Mesero</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ usuario.telefono or '-' }}</td>
+                                <td>
+                                    {% if usuario.activo %}
+                                        <span class="badge bg-success">Activo</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Inactivo</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if usuario.ultimo_acceso %}
+                                        <small>{{ usuario.ultimo_acceso.strftime('%d/%m/%Y %H:%M') }}</small>
+                                    {% else %}
+                                        <small class="text-muted">Nunca</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-primary" onclick="editarUsuario({{ usuario.id }})">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        {% if usuario.id != user.id %}
+                                        <button class="btn btn-outline-danger" onclick="eliminarUsuario({{ usuario.id }})">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nuevo Usuario -->
+<div class="modal fade" id="modalUsuario" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Nuevo Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formUsuario">
+                    <div class="mb-3">
+                        <label class="form-label">Nombre Completo *</label>
+                        <input type="text" class="form-control" name="nombre_completo" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email *</label>
+                        <input type="email" class="form-control" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Contraseña *</label>
+                        <input type="password" class="form-control" name="password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Teléfono</label>
+                        <input type="tel" class="form-control" name="telefono">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Rol *</label>
+                        <select class="form-select" name="rol" required>
+                            <option value="admin">Admin</option>
+                            <option value="staff">Staff</option>
+                            <option value="mesero">Mesero</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="guardarUsuario()">
+                    <i class="bi bi-save me-2"></i>Crear Usuario
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Guardar configuración general
+document.getElementById('formGeneral').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    
+    fetch('/configuracion/general', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Configuración guardada exitosamente');
+        } else {
+            alert('Error: ' + data.message);
+        }
+    });
+});
+
+// Guardar delivery
+document.getElementById('formDelivery').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    
+    fetch('/configuracion/delivery', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Configuración de delivery guardada');
+        }
+    });
+});
+
+// Guardar horarios
+document.getElementById('formHorarios').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    
+    fetch('/configuracion/horarios', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Horarios guardados exitosamente');
+        }
+    });
+});
+
+// Guardar Telegram
+document.getElementById('formTelegram').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    
+    fetch('/configuracion/telegram', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Configuración de Telegram guardada');
+        }
+    });
+});
+
+// Probar bot
+function probarBot() {
+    fetch('/telegram/test')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('statusBot').style.display = 'block';
+            alert('Bot conectado correctamente ✓');
+        } else {
+            alert('Error al conectar con el bot: ' + data.message);
+        }
+    });
+}
+
+// Guardar usuario
+function guardarUsuario() {
+    const form = document.getElementById('formUsuario');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData);
+    
+    fetch('/usuarios', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Usuario creado exitosamente');
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    });
+}
+
+function editarUsuario(id) {
+    alert('Función de edición próximamente');
+}
+
+function eliminarUsuario(id) {
+    if (confirm('¿Estás seguro de eliminar este usuario?')) {
+        fetch(`/usuarios/${id}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Usuario eliminado');
+                location.reload();
+            } else {
+                alert('Error al eliminar usuario');
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

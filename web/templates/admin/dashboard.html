@@ -1,0 +1,196 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Estadísticas Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon primary">
+                <i class="bi bi-bag-check"></i>
+            </div>
+            <h6 class="text-muted mb-1">Pedidos Hoy</h6>
+            <h2 class="mb-0">{{ stats.pedidos_hoy }}</h2>
+            <small class="text-success"><i class="bi bi-arrow-up"></i> +12% vs ayer</small>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon success">
+                <i class="bi bi-currency-dollar"></i>
+            </div>
+            <h6 class="text-muted mb-1">Ingresos Hoy</h6>
+            <h2 class="mb-0">${{ "%.2f"|format(stats.total_hoy) }}</h2>
+            <small class="text-success"><i class="bi bi-arrow-up"></i> +8% vs ayer</small>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon warning">
+                <i class="bi bi-calendar-check"></i>
+            </div>
+            <h6 class="text-muted mb-1">Reservaciones</h6>
+            <h2 class="mb-0">{{ stats.reservaciones_hoy }}</h2>
+            <small class="text-info"><i class="bi bi-calendar"></i> Para hoy</small>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-icon info">
+                <i class="bi bi-people"></i>
+            </div>
+            <h6 class="text-muted mb-1">Clientes</h6>
+            <h2 class="mb-0">156</h2>
+            <small class="text-success"><i class="bi bi-arrow-up"></i> +5 nuevos</small>
+        </div>
+    </div>
+</div>
+
+<!-- Pedidos y Reservaciones Recientes -->
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-bag-check me-2"></i>Pedidos Recientes
+                </h5>
+                <a href="{{ url_for('pedidos') }}" class="btn btn-sm btn-primary">Ver todos</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Pedido</th>
+                                <th>Cliente</th>
+                                <th>Tipo</th>
+                                <th>Total</th>
+                                <th>Estado</th>
+                                <th>Hora</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pedido in pedidos %}
+                            <tr>
+                                <td><strong>#{{ pedido.numero_pedido[:10] }}</strong></td>
+                                <td>{{ pedido.nombre_cliente or 'Sin nombre' }}</td>
+                                <td>
+                                    {% if pedido.tipo_pedido == 'delivery' %}
+                                        <i class="bi bi-truck text-primary"></i> Delivery
+                                    {% elif pedido.tipo_pedido == 'takeaway' %}
+                                        <i class="bi bi-bag text-warning"></i> Llevar
+                                    {% else %}
+                                        <i class="bi bi-shop text-success"></i> Local
+                                    {% endif %}
+                                </td>
+                                <td><strong>${{ "%.2f"|format(pedido.total) }}</strong></td>
+                                <td>
+                                    {% if pedido.estado == 'pendiente' %}
+                                        <span class="badge bg-warning">Pendiente</span>
+                                    {% elif pedido.estado == 'confirmado' %}
+                                        <span class="badge bg-info">Confirmado</span>
+                                    {% elif pedido.estado == 'preparando' %}
+                                        <span class="badge bg-primary">Preparando</span>
+                                    {% elif pedido.estado == 'entregado' %}
+                                        <span class="badge bg-success">Entregado</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ pedido.estado }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ pedido.fecha_pedido.strftime('%H:%M') }}</td>
+                                <td>
+                                    <a href="{{ url_for('ver_pedido', pedido_id=pedido.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">
+                                    <i class="bi bi-inbox" style="font-size: 48px;"></i>
+                                    <p class="mt-2">No hay pedidos recientes</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-calendar-check me-2"></i>Reservaciones
+                </h5>
+                <a href="{{ url_for('reservaciones') }}" class="btn btn-sm btn-primary">Ver todas</a>
+            </div>
+            <div class="card-body">
+                {% for reservacion in reservaciones %}
+                <div class="d-flex align-items-center mb-3 pb-3 border-bottom">
+                    <div class="flex-shrink-0">
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-3">
+                            <i class="bi bi-person-circle text-primary" style="font-size: 24px;"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="mb-1">{{ reservacion.nombre_cliente }}</h6>
+                        <small class="text-muted">
+                            <i class="bi bi-clock"></i> {{ reservacion.hora_reservacion.strftime('%H:%M') }}
+                            <i class="bi bi-people ms-2"></i> {{ reservacion.numero_personas }} personas
+                        </small>
+                        <div class="mt-1">
+                            {% if reservacion.estado == 'confirmada' %}
+                                <span class="badge bg-success">Confirmada</span>
+                            {% elif reservacion.estado == 'pendiente' %}
+                                <span class="badge bg-warning">Pendiente</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ reservacion.estado }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-calendar-x" style="font-size: 48px;"></i>
+                    <p class="mt-2">No hay reservaciones</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gráficas (opcional) -->
+<div class="row g-4 mt-2">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-graph-up me-2"></i>Resumen Semanal
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Próximamente: Gráficas de ventas y estadísticas</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh cada 30 segundos
+    setTimeout(() => {
+        location.reload();
+    }, 30000);
+</script>
+{% endblock %}
