@@ -4,101 +4,14 @@
 {% block page_title %}Gestión de Pedidos{% endblock %}
 
 {% block content %}
-<!-- Filtros y Búsqueda -->
+<!-- Búsqueda Simple -->
 <div class="row mb-4">
-    <div class="col-md-8">
+    <div class="col-md-12">
         <div class="input-group">
             <span class="input-group-text bg-white">
                 <i class="bi bi-search"></i>
             </span>
             <input type="text" class="form-control" id="searchPedidos" placeholder="Buscar por número de pedido, cliente, teléfono...">
-        </div>
-    </div>
-    <div class="col-md-4">
-        <select class="form-select" id="filtroEstado" onchange="filtrarPedidos()">
-            <option value="">Todos los estados</option>
-            <option value="pendiente">Pendientes</option>
-            <option value="confirmado">Confirmados</option>
-            <option value="preparando">En preparación</option>
-            <option value="listo">Listos</option>
-            <option value="en_camino">En camino</option>
-            <option value="entregado">Entregados</option>
-            <option value="cancelado">Cancelados</option>
-        </select>
-    </div>
-</div>
-
-<!-- Estadísticas Rápidas -->
-<div class="row g-3 mb-4">
-    <div class="col-md-3">
-        <div class="card border-0 bg-warning bg-opacity-10">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="flex-shrink-0">
-                        <div class="rounded-circle bg-warning p-3">
-                            <i class="bi bi-clock-history text-white" style="font-size: 24px;"></i>
-                        </div>
-                    </div>
-                    <div class="flex-grow-1 ms-3">
-                        <h6 class="mb-1 text-muted">Pendientes</h6>
-                        <h3 class="mb-0">{{ stats.pendientes or 0 }}</h3>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-3">
-        <div class="card border-0 bg-primary bg-opacity-10">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="flex-shrink-0">
-                        <div class="rounded-circle bg-primary p-3">
-                            <i class="bi bi-fire text-white" style="font-size: 24px;"></i>
-                        </div>
-                    </div>
-                    <div class="flex-grow-1 ms-3">
-                        <h6 class="mb-1 text-muted">Preparando</h6>
-                        <h3 class="mb-0">{{ stats.preparando or 0 }}</h3>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-3">
-        <div class="card border-0 bg-info bg-opacity-10">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="flex-shrink-0">
-                        <div class="rounded-circle bg-info p-3">
-                            <i class="bi bi-truck text-white" style="font-size: 24px;"></i>
-                        </div>
-                    </div>
-                    <div class="flex-grow-1 ms-3">
-                        <h6 class="mb-1 text-muted">En camino</h6>
-                        <h3 class="mb-0">{{ stats.en_camino or 0 }}</h3>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-3">
-        <div class="card border-0 bg-success bg-opacity-10">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="flex-shrink-0">
-                        <div class="rounded-circle bg-success p-3">
-                            <i class="bi bi-check-circle text-white" style="font-size: 24px;"></i>
-                        </div>
-                    </div>
-                    <div class="flex-grow-1 ms-3">
-                        <h6 class="mb-1 text-muted">Hoy</h6>
-                        <h3 class="mb-0">{{ stats.hoy or 0 }}</h3>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 </div>
@@ -143,12 +56,12 @@
                                 <th>Total</th>
                                 <th>Estado</th>
                                 <th>Fecha/Hora</th>
-                                <th>Acciones</th>
+                                <th>Ver</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for pedido in pedidos %}
-                            <tr class="pedido-row" data-estado="{{ pedido.estado }}" data-tipo="{{ pedido.tipo_pedido }}">
+                            <tr class="pedido-row" data-tipo="{{ pedido.tipo_pedido }}">
                                 <td>
                                     <strong class="text-primary">#{{ pedido.numero_pedido[:10] }}</strong>
                                     <br>
@@ -234,25 +147,11 @@
                                     </small>
                                 </td>
                                 <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{{ url_for('ver_pedido', pedido_id=pedido.id) }}" 
-                                           class="btn btn-outline-primary" 
-                                           title="Ver detalle">
-                                            <i class="bi bi-eye"></i>
-                                        </a>
-                                        <button class="btn btn-outline-success" 
-                                                onclick="cambiarEstado({{ pedido.id }})" 
-                                                title="Cambiar estado">
-                                            <i class="bi bi-arrow-repeat"></i>
-                                        </button>
-                                        {% if pedido.estado == 'pendiente' %}
-                                        <button class="btn btn-outline-danger" 
-                                                onclick="cancelarPedido({{ pedido.id }})" 
-                                                title="Cancelar">
-                                            <i class="bi bi-x-circle"></i>
-                                        </button>
-                                        {% endif %}
-                                    </div>
+                                    <a href="{{ url_for('ver_pedido', pedido_id=pedido.id) }}" 
+                                       class="btn btn-sm btn-outline-primary" 
+                                       title="Ver detalle">
+                                        <i class="bi bi-eye"></i> Ver
+                                    </a>
                                 </td>
                             </tr>
                             {% else %}
@@ -267,41 +166,6 @@
                         </tbody>
                     </table>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal Cambiar Estado -->
-<div class="modal fade" id="modalEstado" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Cambiar Estado del Pedido</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="pedidoIdEstado">
-                <div class="mb-3">
-                    <label class="form-label">Nuevo Estado</label>
-                    <select class="form-select" id="nuevoEstado">
-                        <option value="pendiente">Pendiente</option>
-                        <option value="confirmado">Confirmado</option>
-                        <option value="preparando">Preparando</option>
-                        <option value="listo">Listo para entregar</option>
-                        <option value="en_camino">En camino</option>
-                        <option value="entregado">Entregado</option>
-                        <option value="cancelado">Cancelado</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Notas (opcional)</label>
-                    <textarea class="form-control" id="notasEstado" rows="3"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" onclick="guardarEstado()">Guardar Cambio</button>
             </div>
         </div>
     </div>
@@ -322,71 +186,26 @@ document.getElementById('searchPedidos').addEventListener('keyup', function(e) {
     });
 });
 
-// Filtrar por estado
-function filtrarPedidos() {
-    const estado = document.getElementById('filtroEstado').value;
-    const rows = document.querySelectorAll('.pedido-row');
-    
-    rows.forEach(row => {
-        if (!estado || row.dataset.estado === estado) {
-            row.style.display = '';
-        } else {
-            row.style.display = 'none';
-        }
-    });
-}
-
-// Cambiar estado
-function cambiarEstado(pedidoId) {
-    document.getElementById('pedidoIdEstado').value = pedidoId;
-    const modal = new bootstrap.Modal(document.getElementById('modalEstado'));
-    modal.show();
-}
-
-function guardarEstado() {
-    const pedidoId = document.getElementById('pedidoIdEstado').value;
-    const nuevoEstado = document.getElementById('nuevoEstado').value;
-    const notas = document.getElementById('notasEstado').value;
-    
-    fetch(`/pedidos/${pedidoId}/estado`, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            estado: nuevoEstado,
-            notas: notas
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert('Error al cambiar el estado');
-        }
-    });
-}
-
-// Cancelar pedido
-function cancelarPedido(pedidoId) {
-    if (confirm('¿Estás seguro de cancelar este pedido?')) {
-        fetch(`/pedidos/${pedidoId}/cancelar`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'}
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
+// Filtrar por tabs (tipo de pedido)
+document.querySelectorAll('#pedidosTabs button').forEach(button => {
+    button.addEventListener('click', function() {
+        const tipo = this.id.replace('-tab', '');
+        const rows = document.querySelectorAll('.pedido-row');
+        
+        rows.forEach(row => {
+            if (tipo === 'todos') {
+                row.style.display = '';
+            } else if (tipo === 'delivery' && row.dataset.tipo === 'delivery') {
+                row.style.display = '';
+            } else if (tipo === 'takeaway' && row.dataset.tipo === 'takeaway') {
+                row.style.display = '';
+            } else if (tipo === 'restaurant' && row.dataset.tipo === 'restaurant') {
+                row.style.display = '';
             } else {
-                alert('Error al cancelar el pedido');
+                row.style.display = 'none';
             }
         });
-    }
-}
-
-// Auto-refresh cada 30 segundos
-setInterval(() => {
-    location.reload();
-}, 30000);
+    });
+});
 </script>
 {% endblock %}

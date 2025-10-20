@@ -735,7 +735,12 @@ class DatabaseManager:
         try:
             with get_db_cursor() as (cursor, conn):
                 cursor.execute("""
-                    SELECT p.*, c.nombre as cliente_nombre, c.telefono as cliente_telefono,
+                    SELECT p.*, 
+                           COALESCE(p.nombre_cliente, c.nombre) as nombre_cliente,
+                           COALESCE(p.telefono_contacto, c.telefono) as telefono_contacto,
+                           COALESCE(p.direccion_entrega, c.direccion) as direccion_entrega,
+                           c.nombre as cliente_nombre, 
+                           c.telefono as cliente_telefono,
                            r.nombre_restaurante
                     FROM pedidos p
                     INNER JOIN clientes c ON p.cliente_id = c.id
