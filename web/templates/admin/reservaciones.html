@@ -180,7 +180,7 @@
                                 <div>
                                     <i class="bi bi-calendar"></i> {{ reservacion.fecha_reservacion.strftime('%d/%m/%Y') }}
                                     <br>
-                                    <i class="bi bi-clock"></i> {{ reservacion.hora_reservacion.strftime('%H:%M') }}
+                                    <i class="bi bi-clock"></i> {{ reservacion.hora_reservacion | format_time }}
                                 </div>
                             </td>
                             <td class="text-center">
@@ -475,43 +475,426 @@ function actualizarEstadoReservacion(id, nuevoEstado) {
     });
 }
 
+// Función mejorada para ver detalle de reservación
 function verDetalleReservacion(id) {
     fetch(`/reservaciones/${id}`)
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            const reservacion = data.reservacion;
-            document.getElementById('detalleReservacion').innerHTML = `
-                <div class="mb-3">
-                    <label class="text-muted small">Código:</label>
-                    <div class="fw-bold">${reservacion.codigo_reservacion}</div>
+            const r = data.reservacion;
+            
+            // Función para obtener badge de estado
+            const getEstadoBadge = (estado) => {
+                const badges = {
+                    'pendiente': '<span class="status-badge status-pendiente"><i class="bi bi-clock-history"></i> Pendiente</span>',
+                    'confirmada': '<span class="status-badge status-confirmada"><i class="bi bi-check-circle-fill"></i> Confirmada</span>',
+                    'en_curso': '<span class="status-badge status-en-curso"><i class="bi bi-hourglass-split"></i> En Curso</span>',
+                    'completada': '<span class="status-badge status-completada"><i class="bi bi-check-all"></i> Completada</span>',
+                    'cancelada': '<span class="status-badge status-cancelada"><i class="bi bi-x-circle-fill"></i> Cancelada</span>',
+                    'no_show': '<span class="status-badge status-no-show"><i class="bi bi-person-x"></i> No Show</span>'
+                };
+                return badges[estado] || estado;
+            };
+            
+            // Función para obtener icono de origen
+            const getOrigenIcon = (origen) => {
+                const iconos = {
+                    'web': '<i class="bi bi-laptop"></i> Interfaz Web',
+                    'telegram': '<i class="bi bi-telegram"></i> Telegram',
+                    'telefono': '<i class="bi bi-telephone"></i> Teléfono',
+                    'admin': '<i class="bi bi-person-badge"></i> Admin'
+                };
+                return iconos[origen] || origen;
+            };
+            
+            // Formatear fecha
+            const formatearFecha = (fecha) => {
+                const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+                              'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                const f = new Date(fecha + 'T00:00:00');
+                return `${f.getDate()} de ${meses[f.getMonth()]}, ${f.getFullYear()}`;
+            };
+            
+            // Construir HTML del modal
+            const modalContent = `
+                <style>
+                    .modal-header-custom {
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        padding: 2rem;
+                        border-radius: 0;
+                    }
+                    
+                    .reservation-code-badge {
+                        background: rgba(255, 255, 255, 0.2);
+                        padding: 0.5rem 1.2rem;
+                        border-radius: 50px;
+                        font-size: 0.9rem;
+                        font-weight: 600;
+                        display: inline-block;
+                        margin-top: 0.5rem;
+                        backdrop-filter: blur(10px);
+                    }
+                    
+                    .detail-section-custom {
+                        padding: 1.5rem;
+                        background: white;
+                        margin: 1rem 0;
+                        border-radius: 12px;
+                        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+                        border-left: 4px solid #667eea;
+                    }
+                    
+                    .section-title-custom {
+                        font-size: 1.1rem;
+                        font-weight: 700;
+                        color: #1e293b;
+                        margin-bottom: 1rem;
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    }
+                    
+                    .section-title-custom i {
+                        font-size: 1.3rem;
+                        color: #667eea;
+                    }
+                    
+                    .info-row-custom {
+                        display: flex;
+                        align-items: center;
+                        padding: 0.75rem 0;
+                        border-bottom: 1px solid #f1f5f9;
+                    }
+                    
+                    .info-row-custom:last-child {
+                        border-bottom: none;
+                    }
+                    
+                    .info-icon-custom {
+                        width: 40px;
+                        height: 40px;
+                        border-radius: 10px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 1.2rem;
+                        margin-right: 1rem;
+                        flex-shrink: 0;
+                    }
+                    
+                    .icon-blue { background: #dbeafe; color: #3b82f6; }
+                    .icon-green { background: #d1fae5; color: #10b981; }
+                    .icon-purple { background: #e9d5ff; color: #a855f7; }
+                    .icon-orange { background: #fed7aa; color: #f97316; }
+                    .icon-red { background: #fee2e2; color: #ef4444; }
+                    .icon-yellow { background: #fef3c7; color: #f59e0b; }
+                    .icon-pink { background: #fce7f3; color: #ec4899; }
+                    .icon-cyan { background: #cffafe; color: #06b6d4; }
+                    
+                    .info-label-custom {
+                        font-size: 0.85rem;
+                        color: #64748b;
+                        font-weight: 500;
+                        margin-bottom: 0.25rem;
+                    }
+                    
+                    .info-value-custom {
+                        font-size: 1rem;
+                        color: #1e293b;
+                        font-weight: 600;
+                    }
+                    
+                    .status-badge {
+                        padding: 0.5rem 1rem;
+                        border-radius: 50px;
+                        font-weight: 600;
+                        font-size: 0.85rem;
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 6px;
+                    }
+                    
+                    .status-pendiente { background: #fef3c7; color: #92400e; }
+                    .status-confirmada { background: #d1fae5; color: #065f46; }
+                    .status-en-curso { background: #dbeafe; color: #1e40af; }
+                    .status-completada { background: #e0e7ff; color: #3730a3; }
+                    .status-cancelada { background: #fee2e2; color: #991b1b; }
+                    .status-no-show { background: #f3f4f6; color: #374151; }
+                    
+                    .notes-box-custom {
+                        background: #f8fafc;
+                        border-left: 4px solid #667eea;
+                        padding: 1rem;
+                        border-radius: 8px;
+                        font-style: italic;
+                        color: #475569;
+                        margin-top: 1rem;
+                    }
+                    
+                    .special-occasion-box {
+                        background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+                        padding: 1rem 1.2rem;
+                        border-radius: 12px;
+                        display: flex;
+                        align-items: center;
+                        gap: 12px;
+                        margin-top: 1rem;
+                    }
+                    
+                    .special-occasion-box i {
+                        font-size: 1.8rem;
+                    }
+                    
+                    .action-btn-custom {
+                        padding: 0.6rem 1.2rem;
+                        border-radius: 10px;
+                        font-weight: 600;
+                        border: none;
+                        cursor: pointer;
+                        transition: all 0.3s;
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    
+                    .btn-confirm-custom {
+                        background: #10b981;
+                        color: white;
+                    }
+                    
+                    .btn-confirm-custom:hover {
+                        background: #059669;
+                        transform: translateY(-2px);
+                        box-shadow: 0 8px 15px rgba(16, 185, 129, 0.3);
+                    }
+                    
+                    .btn-edit-custom {
+                        background: #3b82f6;
+                        color: white;
+                    }
+                    
+                    .btn-edit-custom:hover {
+                        background: #2563eb;
+                        transform: translateY(-2px);
+                        box-shadow: 0 8px 15px rgba(59, 130, 246, 0.3);
+                    }
+                    
+                    .btn-cancel-custom {
+                        background: #ef4444;
+                        color: white;
+                    }
+                    
+                    .btn-cancel-custom:hover {
+                        background: #dc2626;
+                        transform: translateY(-2px);
+                        box-shadow: 0 8px 15px rgba(239, 68, 68, 0.3);
+                    }
+                    
+                    #modalDetalle .modal-dialog {
+                        max-width: 700px;
+                    }
+                    
+                    #modalDetalle .modal-content {
+                        border: none;
+                        border-radius: 20px;
+                        overflow: hidden;
+                    }
+                    
+                    #modalDetalle .modal-body {
+                        padding: 0;
+                        background: #f8fafc;
+                        max-height: 70vh;
+                        overflow-y: auto;
+                    }
+                    
+                    #modalDetalle .modal-footer {
+                        padding: 1.5rem;
+                        background: white;
+                        border-top: 1px solid #e2e8f0;
+                    }
+                </style>
+                
+                <div class="modal-header-custom">
+                    <div style="width: 100%;">
+                        <h3 style="margin: 0; font-size: 1.6rem; display: flex; align-items: center; gap: 10px;">
+                            <i class="bi bi-calendar-check"></i>
+                            Detalle de Reservación
+                        </h3>
+                        <div class="reservation-code-badge">
+                            <i class="bi bi-tag"></i> ${r.codigo_reservacion || 'N/A'}
+                        </div>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="text-muted small">Cliente:</label>
-                    <div class="fw-bold">${reservacion.nombre_cliente}</div>
+                
+                <div style="padding: 1.5rem;">
+                    <!-- Información del Cliente -->
+                    <div class="detail-section-custom">
+                        <div class="section-title-custom">
+                            <i class="bi bi-person-circle"></i>
+                            Información del Cliente
+                        </div>
+                        
+                        <div class="info-row-custom">
+                            <div class="info-icon-custom icon-blue">
+                                <i class="bi bi-person"></i>
+                            </div>
+                            <div>
+                                <div class="info-label-custom">Nombre</div>
+                                <div class="info-value-custom">${r.nombre_cliente || 'N/A'}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-row-custom">
+                            <div class="info-icon-custom icon-green">
+                                <i class="bi bi-telephone"></i>
+                            </div>
+                            <div>
+                                <div class="info-label-custom">Teléfono</div>
+                                <div class="info-value-custom">${r.telefono || 'N/A'}</div>
+                            </div>
+                        </div>
+                        
+                        ${r.email ? `
+                        <div class="info-row-custom">
+                            <div class="info-icon-custom icon-purple">
+                                <i class="bi bi-envelope"></i>
+                            </div>
+                            <div>
+                                <div class="info-label-custom">Email</div>
+                                <div class="info-value-custom">${r.email}</div>
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                    
+                    <!-- Detalles de la Reservación -->
+                    <div class="detail-section-custom">
+                        <div class="section-title-custom">
+                            <i class="bi bi-calendar2-event"></i>
+                            Detalles de la Reservación
+                        </div>
+                        
+                        <div class="info-row-custom">
+                            <div class="info-icon-custom icon-orange">
+                                <i class="bi bi-calendar3"></i>
+                            </div>
+                            <div>
+                                <div class="info-label-custom">Fecha</div>
+                                <div class="info-value-custom">${formatearFecha(r.fecha_reservacion)}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-row-custom">
+                            <div class="info-icon-custom icon-red">
+                                <i class="bi bi-clock"></i>
+                            </div>
+                            <div>
+                                <div class="info-label-custom">Hora</div>
+                                <div class="info-value-custom">${r.hora_reservacion} hrs</div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-row-custom">
+                            <div class="info-icon-custom icon-yellow">
+                                <i class="bi bi-people"></i>
+                            </div>
+                            <div>
+                                <div class="info-label-custom">Número de Personas</div>
+                                <div class="info-value-custom">${r.numero_personas || 0} personas</div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-row-custom">
+                            <div class="info-icon-custom icon-pink">
+                                <i class="bi bi-shop"></i>
+                            </div>
+                            <div>
+                                <div class="info-label-custom">Mesa Asignada</div>
+                                <div class="info-value-custom">${r.numero_mesa ? 'Mesa ' + r.numero_mesa : 'No asignada'}</div>
+                            </div>
+                        </div>
+                        
+                        ${r.ocasion_especial ? `
+                        <div class="special-occasion-box">
+                            <i class="bi bi-balloon-heart"></i>
+                            <div>
+                                <div class="info-label-custom">Ocasión Especial</div>
+                                <div class="info-value-custom">${r.ocasion_especial}</div>
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                    
+                    <!-- Estado e Información Adicional -->
+                    <div class="detail-section-custom">
+                        <div class="section-title-custom">
+                            <i class="bi bi-info-circle"></i>
+                            Estado e Información Adicional
+                        </div>
+                        
+                        <div class="info-row-custom">
+                            <div class="info-icon-custom icon-green">
+                                <i class="bi bi-check-circle"></i>
+                            </div>
+                            <div>
+                                <div class="info-label-custom">Estado</div>
+                                <div class="info-value-custom">
+                                    ${getEstadoBadge(r.estado)}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="info-row-custom">
+                            <div class="info-icon-custom icon-blue">
+                                <i class="bi bi-globe"></i>
+                            </div>
+                            <div>
+                                <div class="info-label-custom">Origen</div>
+                                <div class="info-value-custom">${getOrigenIcon(r.origen)}</div>
+                            </div>
+                        </div>
+                        
+                        ${r.created_at ? `
+                        <div class="info-row-custom">
+                            <div class="info-icon-custom icon-purple">
+                                <i class="bi bi-clock-history"></i>
+                            </div>
+                            <div>
+                                <div class="info-label-custom">Fecha de Registro</div>
+                                <div class="info-value-custom">${r.created_at}</div>
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        ${r.notas_especiales ? `
+                        <div class="notes-box-custom">
+                            <div class="info-label-custom" style="margin-bottom: 0.5rem;">
+                                <i class="bi bi-sticky"></i> Notas Especiales
+                            </div>
+                            <div style="font-style: italic;">
+                                <i class="bi bi-quote"></i> ${r.notas_especiales}
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="text-muted small">Fecha y Hora:</label>
-                    <div class="fw-bold">${reservacion.fecha_reservacion} ${reservacion.hora_reservacion}</div>
-                </div>
-                <div class="mb-3">
-                    <label class="text-muted small">Personas:</label>
-                    <div class="fw-bold">${reservacion.numero_personas}</div>
-                </div>
-                ${reservacion.notas_especiales ? `
-                <div class="mb-3">
-                    <label class="text-muted small">Notas:</label>
-                    <div>${reservacion.notas_especiales}</div>
-                </div>
-                ` : ''}
             `;
             
+            document.getElementById('detalleReservacion').innerHTML = modalContent;
+            
+            // Mostrar modal
             const modal = new bootstrap.Modal(document.getElementById('modalDetalle'));
             modal.show();
+        } else {
+            alert('Error al cargar los detalles de la reservación');
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error de conexión al cargar los detalles');
     });
 }
-
 function cambiarVista(vista) {
     // Por ahora solo lista, calendario próximamente
     alert('Vista de calendario próximamente');

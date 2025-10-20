@@ -396,6 +396,8 @@ def ver_reservacion(reservacion_id):
     
     # Obtener reservación
     from database.database_multirestaurante import get_db_cursor
+    from datetime import timedelta, date
+    
     with get_db_cursor() as (cursor, conn):
         cursor.execute("""
             SELECT * FROM reservaciones 
@@ -405,6 +407,18 @@ def ver_reservacion(reservacion_id):
     
     if not reservacion:
         return jsonify({'success': False, 'message': 'Reservación no encontrada'}), 404
+    
+    # Convertir timedelta a string para JSON
+    if reservacion.get('hora_reservacion') and isinstance(reservacion['hora_reservacion'], timedelta):
+        td = reservacion['hora_reservacion']
+        total_seconds = int(td.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        reservacion['hora_reservacion'] = f"{hours:02d}:{minutes:02d}"
+    
+    # Convertir date a string si es necesario
+    if reservacion.get('fecha_reservacion') and isinstance(reservacion['fecha_reservacion'], date):
+        reservacion['fecha_reservacion'] = reservacion['fecha_reservacion'].strftime('%Y-%m-%d')
     
     return jsonify({'success': True, 'reservacion': reservacion})
 
@@ -520,15 +534,37 @@ def format_date(value):
         value = datetime.fromisoformat(value)
     return value.strftime('%d/%m/%Y')
 
+# Agregar este filtro después de los otros filtros en admin_server.py
+# Busca la sección "FILTROS DE PLANTILLAS" y agrega esto:
+
 @app.template_filter('format_time')
 def format_time(value):
-    """Formatear solo hora"""
+    """Formatear solo hora - Compatible con time y timedelta"""
+    from datetime import timedelta, time
+    
+    if value is None:
+        return "N/A"
+    
+    # Si es un string, intentar parsearlo
     if isinstance(value, str):
         try:
+            from datetime import datetime
             value = datetime.strptime(value, '%H:%M:%S').time()
         except:
-            pass
-    return value.strftime('%H:%M')
+            return value
+    
+    # Si es timedelta (duración), convertir a hora
+    if isinstance(value, timedelta):
+        total_seconds = int(value.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        return f"{hours:02d}:{minutes:02d}"
+    
+    # Si es time normal
+    if isinstance(value, time):
+        return value.strftime('%H:%M')
+    
+    return str(value)
 
 @app.template_filter('estado_badge')
 def estado_badge(estado):
