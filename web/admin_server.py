@@ -294,9 +294,20 @@ def pedidos():
     # Obtener pedidos (por ahora todos los recientes)
     pedidos_lista = db.get_pedidos_restaurante(restaurante_id, limit=50)
     
+    # Obtener estadísticas desde la base de datos
+    stats = db.get_estadisticas_hoy(restaurante_id)
+    
+    # Asegurar que stats tenga los campos necesarios para pedidos
+    if 'pendientes' not in stats:
+        stats['pendientes'] = sum(1 for p in pedidos_lista if p.get('estado') in ['pendiente', 'confirmado'])
+        stats['en_proceso'] = sum(1 for p in pedidos_lista if p.get('estado') in ['preparando', 'en_camino'])
+        stats['completados'] = sum(1 for p in pedidos_lista if p.get('estado') in ['entregado', 'listo'])
+        stats['total'] = len(pedidos_lista)
+    
     return render_template('admin/pedidos.html',
                          user=user,
-                         pedidos=pedidos_lista)
+                         pedidos=pedidos_lista,
+                         stats=stats)
 
 @app.route('/pedidos/<int:pedido_id>')
 @login_required
@@ -316,25 +327,6 @@ def ver_pedido(pedido_id):
                          user=user,
                          pedido=pedido,
                          detalle=detalle)
-
-@app.route('/api/pedidos/<int:pedido_id>/estado', methods=['PUT'])
-@login_required
-def actualizar_estado_pedido(pedido_id):
-    """Actualizar estado de un pedido"""
-    user = get_current_user()
-    data = request.get_json()
-    nuevo_estado = data.get('estado')
-    
-    # Verificar que el pedido pertenece al restaurante
-    pedido = db.get_pedido(pedido_id)
-    if not pedido or pedido['restaurante_id'] != user['restaurante_id']:
-        return jsonify({'success': False, 'message': 'Pedido no encontrado'}), 404
-    
-    success = db.actualizar_estado_pedido(pedido_id, nuevo_estado)
-    
-    if success:
-        return jsonify({'success': True, 'message': 'Estado actualizado'})
-    return jsonify({'success': False, 'message': 'Error al actualizar'}), 500
 
 # ==================== GESTIÓN DE RESERVACIONES ====================
 
