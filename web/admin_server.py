@@ -330,19 +330,103 @@ def ver_pedido(pedido_id):
 
 # ==================== GESTIÓN DE RESERVACIONES ====================
 
-@app.route('/reservaciones')
+# ==================== GESTIÓN DE RESERVACIONES ====================
+
+@app.route('/reservaciones', methods=['GET', 'POST'])
 @login_required
 def reservaciones():
     """Página de gestión de reservaciones"""
     user = get_current_user()
     restaurante_id = user['restaurante_id']
     
-    # Obtener reservaciones
+    if request.method == 'POST':
+        # Crear nueva reservación desde el panel admin
+        data = request.get_json()
+        
+        # Primero crear o buscar cliente
+        cliente = db.get_or_create_cliente(
+            restaurante_id=restaurante_id,
+            nombre=data['nombre_cliente'],
+            origen='admin'
+        )
+        
+        if not cliente:
+            return jsonify({'success': False, 'message': 'Error al crear cliente'}), 500
+        
+        # Crear reservación
+        reservacion = db.crear_reservacion(
+            restaurante_id=restaurante_id,
+            cliente_id=cliente['id'],
+            nombre=data['nombre_cliente'],
+            telefono=data['telefono'],
+            fecha=data['fecha_reservacion'],
+            hora=data['hora_reservacion'],
+            personas=data['numero_personas'],
+            origen='admin'
+        )
+        
+        if reservacion:
+            return jsonify({'success': True, 'message': 'Reservación creada', 'id': reservacion['id']})
+        return jsonify({'success': False, 'message': 'Error al crear reservación'}), 500
+    
+    # GET - Obtener reservaciones
     reservaciones_lista = db.get_reservaciones_restaurante(restaurante_id, limit=50)
+    
+    # Calcular estadísticas de reservaciones
+    from datetime import date
+    hoy = date.today()
+    
+    stats = {
+        'hoy': sum(1 for r in reservaciones_lista if r.get('fecha_reservacion') == hoy),
+        'pendientes': sum(1 for r in reservaciones_lista if r.get('estado') == 'pendiente'),
+        'confirmadas': sum(1 for r in reservaciones_lista if r.get('estado') == 'confirmada'),
+        'personas_hoy': sum(r.get('numero_personas', 0) for r in reservaciones_lista if r.get('fecha_reservacion') == hoy)
+    }
     
     return render_template('admin/reservaciones.html',
                          user=user,
-                         reservaciones=reservaciones_lista)
+                         reservaciones=reservaciones_lista,
+                         stats=stats)
+
+@app.route('/reservaciones/<int:reservacion_id>', methods=['GET'])
+@login_required
+def ver_reservacion(reservacion_id):
+    """Ver detalle de una reservación"""
+    user = get_current_user()
+    
+    # Obtener reservación
+    from database.database_multirestaurante import get_db_cursor
+    with get_db_cursor() as (cursor, conn):
+        cursor.execute("""
+            SELECT * FROM reservaciones 
+            WHERE id = %s AND restaurante_id = %s
+        """, (reservacion_id, user['restaurante_id']))
+        reservacion = cursor.fetchone()
+    
+    if not reservacion:
+        return jsonify({'success': False, 'message': 'Reservación no encontrada'}), 404
+    
+    return jsonify({'success': True, 'reservacion': reservacion})
+
+@app.route('/reservaciones/<int:reservacion_id>/estado', methods=['PUT'])
+@login_required
+def actualizar_estado_reservacion(reservacion_id):
+    """Actualizar estado de una reservación"""
+    user = get_current_user()
+    data = request.get_json()
+    nuevo_estado = data.get('estado')
+    
+    # Actualizar estado
+    from database.database_multirestaurante import get_db_cursor
+    with get_db_cursor() as (cursor, conn):
+        cursor.execute("""
+            UPDATE reservaciones 
+            SET estado = %s 
+            WHERE id = %s AND restaurante_id = %s
+        """, (nuevo_estado, reservacion_id, user['restaurante_id']))
+        conn.commit()
+    
+    return jsonify({'success': True, 'message': 'Estado actualizado'})
 
 # ==================== CONFIGURACIÓN DEL RESTAURANTE ====================
 
