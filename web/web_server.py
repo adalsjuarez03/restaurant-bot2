@@ -59,6 +59,14 @@ class WebChatSession:
         self.cliente_id = None
         self.registration_step = "needs_name"
         self.is_registered = False
+        
+        # Variables para reservaciones
+        self.reservation_step = None
+        self.reservation_date = None
+        self.reservation_time = None
+        self.reservation_people = None
+        self.reservation_occasion = None
+        self.reservation_notes = None
     
     def add_message(self, text, is_user=True):
         message = {
@@ -92,7 +100,7 @@ class MockUser:
         self.username = "web_user"
 
 def send_notification_to_group(notification_type, data, session):
-    """Enviar notificación al grupo de Telegram"""
+    """Enviar notificación al grupo de Telegram - ACTUALIZADO"""
     try:
         target_chat = CHAT_IDS.get("cocina") or CHAT_IDS.get("grupo_restaurante") or CHAT_IDS.get("admin")
         
@@ -134,6 +142,34 @@ def send_notification_to_group(notification_type, data, session):
             bot.send_message(target_chat, message)
             print(f"✅ Pedido notificado al grupo: {target_chat}")
             
+        elif notification_type == "new_reservation":
+            reservacion = data['reservacion']
+            
+            message = f"""🎯 NUEVA RESERVACIÓN WEB
+
+👤 Cliente: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+🆔 Código: {reservacion['codigo_reservacion']}
+
+📅 Fecha: {data['fecha']}
+⏰ Hora: {data['hora']}
+👥 Personas: {data['personas']}"""
+            
+            if data.get('ocasion'):
+                message += f"\n🎉 Ocasión: {data['ocasion']}"
+            
+            if data.get('notas'):
+                message += f"\n📝 Notas: {data['notas']}"
+            
+            message += f"""
+
+🌐 Origen: Interfaz Web
+⏰ Registrado: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+✅ Estado: Pendiente de confirmación"""
+            
+            bot.send_message(target_chat, message)
+            print(f"✅ Reservación notificada al grupo: {target_chat}")
+            
         elif notification_type == "new_message":
             message = f"""💬 MENSAJE DEL CHAT WEB
 
@@ -148,6 +184,264 @@ def send_notification_to_group(notification_type, data, session):
         print(f"❌ Error enviando notificación: {e}")
         import traceback
         traceback.print_exc()
+
+def process_reservacion_flow(session, text_lower, text):
+    """Procesar el flujo de reservaciones"""
+    
+    # Detectar intención de reservar
+    if any(word in text_lower for word in ['reservar', 'reserva', 'reservación', 'mesa', 'apartar']):
+        if not session.is_registered:
+            return "Para hacer una reservación, primero necesito que te registres. Escribe cualquier cosa para comenzar."
+        
+        session.reservation_step = "waiting_date"
+        return f"""🎯 ¡Perfecto! Vamos a hacer tu reservación.
+
+📅 ¿Para qué fecha deseas reservar?
+(Formato: DD/MM/AAAA o escribe 'hoy' o 'mañana')
+
+Ejemplo: 25/10/2025"""
+    
+    # Flujo de reservación activo
+    if hasattr(session, 'reservation_step'):
+        
+        # Paso 1: Capturar fecha
+        if session.reservation_step == "waiting_date":
+            from datetime import datetime, timedelta
+            
+            fecha = None
+            if text_lower == 'hoy':
+                fecha = datetime.now().date()
+            elif text_lower in ['mañana', 'manana']:
+                fecha = (datetime.now() + timedelta(days=1)).date()
+            else:
+                try:
+                    fecha = datetime.strptime(text, '%d/%m/%Y').date()
+                except:
+                    return "❌ Formato de fecha incorrecto. Por favor usa DD/MM/AAAA\nEjemplo: 25/10/2025"
+            
+            # Validar que la fecha no sea pasada
+            if fecha < datetime.now().date():
+                return "❌ No puedes reservar para una fecha pasada. Por favor elige una fecha futura."
+            
+            session.reservation_date = fecha
+            session.reservation_step = "waiting_time"
+            
+            return f"""✅ Fecha: {fecha.strftime('%d/%m/%Y')}
+
+⏰ ¿A qué hora?
+(Formato: HH:MM - horario de 24 horas)
+
+Ejemplo: 19:00 o 20:30"""
+        
+        # Paso 2: Capturar hora
+        elif session.reservation_step == "waiting_time":
+            try:
+                from datetime import datetime
+                hora_obj = datetime.strptime(text, '%H:%M').time()
+                
+                # Validar horario del restaurante
+                from config import RESTAURANT_CONFIG
+                horarios = RESTAURANT_CONFIG.get('horarios_reservacion', [])
+                
+                session.reservation_time = hora_obj
+                session.reservation_step = "waiting_people"
+                
+                return f"""✅ Hora: {hora_obj.strftime('%H:%M')}
+
+👥 ¿Para cuántas personas?
+(Escribe un número entre 1 y 20)
+
+Ejemplo: 4"""
+            except:
+                return "❌ Formato de hora incorrecto. Por favor usa HH:MM\nEjemplo: 19:00"
+        
+        # Paso 3: Capturar número de personas
+        elif session.reservation_step == "waiting_people":
+            try:
+                personas = int(text)
+                if personas < 1 or personas > 20:
+                    return "❌ El número de personas debe estar entre 1 y 20."
+                
+                session.reservation_people = personas
+                session.reservation_step = "waiting_occasion"
+                
+                return f"""✅ Mesa para {personas} personas
+
+🎉 ¿Es una ocasión especial? (opcional)
+Elige una opción o escribe 'ninguna':
+
+1. Cumpleaños
+2. Aniversario
+3. Cita romántica
+4. Reunión de negocios
+5. Celebración
+6. Ninguna"""
+            except:
+                return "❌ Por favor escribe solo el número de personas.\nEjemplo: 4"
+        
+        # Paso 4: Ocasión especial
+        elif session.reservation_step == "waiting_occasion":
+            ocasiones = {
+                '1': 'Cumpleaños',
+                '2': 'Aniversario', 
+                '3': 'Cita romántica',
+                '4': 'Reunión de negocios',
+                '5': 'Celebración',
+                '6': 'Ninguna',
+                'ninguna': 'Ninguna'
+            }
+            
+            ocasion = ocasiones.get(text_lower, text if len(text) < 50 else 'Ninguna')
+            session.reservation_occasion = None if ocasion == 'Ninguna' else ocasion
+            session.reservation_step = "waiting_notes"
+            
+            return f"""✅ Ocasión: {ocasion}
+
+📝 ¿Alguna nota especial?
+(Alergias, preferencias de mesa, etc.)
+
+Escribe 'no' si no tienes notas especiales."""
+        
+        # Paso 5: Notas especiales
+        elif session.reservation_step == "waiting_notes":
+            notas = None if text_lower in ['no', 'ninguna', 'nada'] else text
+            session.reservation_notes = notas
+            session.reservation_step = "confirm"
+            
+            # Mostrar resumen
+            from datetime import datetime
+            fecha_formato = session.reservation_date.strftime('%d/%m/%Y')
+            hora_formato = session.reservation_time.strftime('%H:%M')
+            
+            resumen = f"""📋 RESUMEN DE TU RESERVACIÓN
+
+👤 Nombre: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+📅 Fecha: {fecha_formato}
+⏰ Hora: {hora_formato}
+👥 Personas: {session.reservation_people}"""
+            
+            if session.reservation_occasion:
+                resumen += f"\n🎉 Ocasión: {session.reservation_occasion}"
+            
+            if notas:
+                resumen += f"\n📝 Notas: {notas}"
+            
+            resumen += "\n\n✅ Escribe 'confirmar' para completar la reservación"
+            resumen += "\n❌ Escribe 'cancelar' para empezar de nuevo"
+            
+            return resumen
+        
+        # Paso 6: Confirmar reservación
+        elif session.reservation_step == "confirm":
+            if 'confirmar' in text_lower:
+                # 🔥 GUARDAR DATOS ANTES DE BORRARLOS
+                fecha_guardada = session.reservation_date
+                hora_guardada = session.reservation_time
+                personas_guardadas = session.reservation_people
+                ocasion_guardada = session.reservation_occasion
+                notas_guardadas = session.reservation_notes
+        
+                # Crear reservación en la BD
+                restaurante_id = 1  # TODO: Obtener dinámicamente
+        
+                reservacion = db.crear_reservacion(
+                    restaurante_id=restaurante_id,
+                    cliente_id=session.cliente_id,
+                    nombre=session.customer_name,
+                    telefono=session.customer_phone,
+                    fecha=fecha_guardada,
+                    hora=hora_guardada,
+                    personas=personas_guardadas,
+                    origen='web'
+            )
+        
+            if reservacion:
+                # Actualizar ocasión y notas si existen
+                if ocasion_guardada or notas_guardadas:
+                    from database.database_multirestaurante import get_db_cursor
+                    with get_db_cursor() as (cursor, conn):
+                        cursor.execute("""
+                            UPDATE reservaciones 
+                            SET ocasion_especial = %s, notas_especiales = %s
+                            WHERE id = %s
+                        """, (ocasion_guardada, notas_guardadas, reservacion['id']))
+                        conn.commit()
+            
+                # Enviar notificación al grupo de Telegram
+                send_notification_to_group("new_reservation", {
+                    'reservacion': reservacion,
+                    'fecha': fecha_guardada.strftime('%d/%m/%Y'),
+                    'hora': hora_guardada.strftime('%H:%M'),
+                    'personas': personas_guardadas,
+                    'ocasion': ocasion_guardada,
+                    'notas': notas_guardadas
+                }, session)
+            
+                # 🎉 CREAR MENSAJE DE CONFIRMACIÓN ANTES DE BORRAR
+                mensaje_confirmacion = f"""✅ ¡RESERVACIÓN CONFIRMADA!
+
+🎫 Código: {reservacion['codigo_reservacion']}
+
+📅 {fecha_guardada.strftime('%d/%m/%Y')} a las {hora_guardada.strftime('%H:%M')}
+👥 Mesa para {personas_guardadas} personas
+👤 A nombre de: {session.customer_name}
+📱 Teléfono: {session.customer_phone}"""
+
+                if ocasion_guardada:
+                    mensaje_confirmacion += f"\n🎉 Ocasión: {ocasion_guardada}"
+            
+                if notas_guardadas:
+                    mensaje_confirmacion += f"\n📝 Notas: {notas_guardadas}"
+
+                mensaje_confirmacion += """
+
+📞 CONFIRMACIÓN:
+Te contactaremos al número registrado para confirmar tu reservación.
+
+⚠️ IMPORTANTE:
+• Llega 10 minutos antes de tu hora
+• Tiempo de tolerancia: 15 minutos
+• Si no puedes asistir, avísanos con anticipación
+
+¡Te esperamos! 🍽️
+
+Escribe 'menú' para hacer un pedido
+Escribe 'reservar' para hacer otra reservación"""
+            
+                # AHORA SÍ, limpiar datos de reservación
+                delattr(session, 'reservation_step')
+                delattr(session, 'reservation_date')
+                delattr(session, 'reservation_time')
+                delattr(session, 'reservation_people')
+                delattr(session, 'reservation_occasion')
+                delattr(session, 'reservation_notes')
+            
+                return mensaje_confirmacion
+            else:
+                # Limpiar y resetear
+                if hasattr(session, 'reservation_step'):
+                    delattr(session, 'reservation_step')
+                return "❌ Error al crear la reservación. Por favor intenta de nuevo o contáctanos directamente."
+    
+        elif 'cancelar' in text_lower:
+            # Limpiar datos
+            if hasattr(session, 'reservation_step'):
+                delattr(session, 'reservation_step')
+                if hasattr(session, 'reservation_date'):
+                    delattr(session, 'reservation_date')
+                if hasattr(session, 'reservation_time'):
+                    delattr(session, 'reservation_time')
+                if hasattr(session, 'reservation_people'):
+                    delattr(session, 'reservation_people')
+                if hasattr(session, 'reservation_occasion'):
+                    delattr(session, 'reservation_occasion')
+                if hasattr(session, 'reservation_notes'):
+                    delattr(session, 'reservation_notes')
+        
+            return "❌ Reservación cancelada.\n\nEscribe 'reservar' para intentar de nuevo."
+    
+    return None  # No es flujo de reservación
 
 @app.route('/')
 def index():
@@ -380,6 +674,16 @@ def process_bot_message(mock_message, session):
         
         # ✅ DEFINIR RESTAURANTE_ID
         restaurante_id = 1  # TODO: Obtener dinámicamente según configuración/sesión
+        # ✅ PROCESAR RESERVACIONES (antes del registro)
+        if session.is_registered:
+            reservacion_response = process_reservacion_flow(session, text_lower, text)
+            if reservacion_response:
+                return reservacion_response
+        
+        # PROCESAR FLUJO DE RESERVACIÓN (ALTA PRIORIDAD)
+        reservacion_response = process_reservacion_flow(session, text_lower, text)
+        if reservacion_response:
+            return reservacion_response
         
         # PROCESO DE REGISTRO DE USUARIO
         if not session.is_registered:
@@ -679,6 +983,7 @@ Puedo ayudarte con:
 • Consultar precios
 • Información de delivery y horarios
 • Ver tu carrito actual
+• Hacer una reservación (escribe "reservar")
 
 Para ordenar, escribe:
 "Quiero [nombre del platillo]"
@@ -704,6 +1009,7 @@ if __name__ == "__main__":
     print(f"📱 Grupo notificaciones: {CHAT_IDS.get('cocina', CHAT_IDS.get('admin', 'No configurado'))}")
     print("✅ Listo para recibir mensajes desde la web")
     print("🎯 MODO DINÁMICO: Todo se consulta desde la BD")
+    print("📅 SISTEMA DE RESERVACIONES INTEGRADO")
     print("=" * 60)
     
     run_flask_server()

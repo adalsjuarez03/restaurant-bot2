@@ -144,7 +144,7 @@
                     <div class="flex-grow-1 ms-3">
                         <h6 class="mb-1">{{ reservacion.nombre_cliente }}</h6>
                         <small class="text-muted">
-                            <i class="bi bi-clock"></i> {{ reservacion.hora_reservacion.strftime('%H:%M') }}
+                            <i class="bi bi-clock"></i> {{ reservacion.hora_reservacion | format_time }}
                             <i class="bi bi-people ms-2"></i> {{ reservacion.numero_personas }} personas
                         </small>
                         <div class="mt-1">
