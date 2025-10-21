@@ -56,52 +56,52 @@
                                 <div class="input-group">
                                     <span class="input-group-text">tuapp.com/</span>
                                     <input type="text" class="form-control" name="slug" 
-                                           value="{{ restaurante.slug }}" required>
+                                           value="{{ restaurante.slug }}" required readonly>
                                 </div>
-                                <small class="text-muted">Solo letras minúsculas, números y guiones</small>
+                                <small class="text-muted">El slug no se puede modificar después de creado</small>
                             </div>
                             
                             <div class="mb-3">
                                 <label class="form-label">Descripción</label>
-                                <textarea class="form-control" name="descripcion" rows="3">{{ restaurante.descripcion }}</textarea>
+                                <textarea class="form-control" name="descripcion" rows="3">{{ restaurante.descripcion if restaurante.descripcion else '' }}</textarea>
                             </div>
                             
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Teléfono</label>
                                     <input type="tel" class="form-control" name="telefono" 
-                                           value="{{ restaurante.telefono }}">
+                                           value="{{ restaurante.telefono if restaurante.telefono else '' }}">
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Email</label>
                                     <input type="email" class="form-control" name="email" 
-                                           value="{{ restaurante.email }}">
+                                           value="{{ restaurante.email if restaurante.email else '' }}">
                                 </div>
                             </div>
                             
                             <div class="mb-3">
                                 <label class="form-label">Dirección</label>
                                 <input type="text" class="form-control" name="direccion" 
-                                       value="{{ restaurante.direccion }}">
+                                       value="{{ restaurante.direccion if restaurante.direccion else '' }}">
                             </div>
                             
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Ciudad</label>
                                     <input type="text" class="form-control" name="ciudad" 
-                                           value="{{ restaurante.ciudad }}">
+                                           value="{{ restaurante.ciudad if restaurante.ciudad else '' }}">
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label">Estado</label>
                                     <input type="text" class="form-control" name="estado_republica" 
-                                           value="{{ restaurante.estado_republica }}">
+                                           value="{{ restaurante.estado_republica if restaurante.estado_republica else '' }}">
                                 </div>
                             </div>
                             
                             <div class="mb-3">
                                 <label class="form-label">Código Postal</label>
                                 <input type="text" class="form-control" name="codigo_postal" 
-                                       value="{{ restaurante.codigo_postal }}">
+                                       value="{{ restaurante.codigo_postal if restaurante.codigo_postal else '' }}">
                             </div>
                             
                             <button type="submit" class="btn btn-primary">
@@ -122,22 +122,27 @@
                         <div class="mb-3">
                             <label class="form-label">Logo URL</label>
                             <input type="url" class="form-control form-control-sm" 
-                                   name="logo_url" value="{{ restaurante.logo_url }}">
+                                   name="logo_url" 
+                                   value="{{ restaurante.logo_url if restaurante.logo_url else '' }}" 
+                                   placeholder="https://ejemplo.com/logo.png">
+                            <small class="text-muted">URL de tu logo</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Banner URL</label>
                             <input type="url" class="form-control form-control-sm" 
-                                   name="banner_url" value="{{ restaurante.banner_url }}">
+                                   name="banner_url" 
+                                   value="{{ restaurante.banner_url if restaurante.banner_url else '' }}"
+                                   placeholder="https://ejemplo.com/banner.jpg">
+                            <small class="text-muted">Imagen de portada</small>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Color Primario</label>
-                            <input type="color" class="form-control form-control-color w-100" 
-                                   name="color_primario" value="{{ restaurante.color_primario or '#667eea' }}">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Color Secundario</label>
-                            <input type="color" class="form-control form-control-color w-100" 
-                                   name="color_secundario" value="{{ restaurante.color_secundario or '#764ba2' }}">
+                        <div class="alert alert-info mb-0">
+                            <small>
+                                <i class="bi bi-info-circle me-2"></i>
+                                <strong>Tip:</strong> Sube tus imágenes a servicios como 
+                                <a href="https://imgur.com" target="_blank">Imgur</a> o 
+                                <a href="https://imgbb.com" target="_blank">ImgBB</a> 
+                                y copia la URL aquí.
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -202,7 +207,7 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Costo de Envío Base</label>
                             <input type="number" class="form-control" name="costo_envio_base" 
-                                   step="0.01" value="0.00">
+                                   step="0.01" value="35.00">
                         </div>
                     </div>
                     
@@ -210,7 +215,7 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Pedido Mínimo para Delivery</label>
                             <input type="number" class="form-control" name="pedido_minimo" 
-                                   step="0.01" value="100.00">
+                                   step="0.01" value="150.00">
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Envío Gratis Desde</label>
@@ -319,15 +324,15 @@
                     <div class="mb-3">
                         <label class="form-label">Bot Token *</label>
                         <input type="text" class="form-control" name="bot_token" 
-                               value="{{ restaurante.bot_token }}"
+                               value="{{ restaurante.bot_token if restaurante.bot_token else '' }}"
                                placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz">
                         <small class="text-muted">Token de tu bot de Telegram</small>
                     </div>
                     
                     <div class="mb-3">
                         <label class="form-label">Admin ID (opcional)</label>
-                        <input type="number" class="form-control" name="telegram_admin_id" 
-                               value="{{ restaurante.telegram_admin_id }}">
+                        <input type="text" class="form-control" name="telegram_admin_id" 
+                               value="{{ restaurante.telegram_admin_id if restaurante.telegram_admin_id else '' }}">
                         <small class="text-muted">
                             Tu Telegram User ID. Usa <strong>@userinfobot</strong> para obtenerlo
                         </small>
@@ -335,8 +340,8 @@
                     
                     <div class="mb-3">
                         <label class="form-label">Group ID (opcional)</label>
-                        <input type="number" class="form-control" name="telegram_group_id" 
-                               value="{{ restaurante.telegram_group_id }}">
+                        <input type="text" class="form-control" name="telegram_group_id" 
+                               value="{{ restaurante.telegram_group_id if restaurante.telegram_group_id else '' }}">
                         <small class="text-muted">ID del grupo donde recibirás notificaciones</small>
                     </div>
                     
@@ -372,10 +377,7 @@
                 
                 <hr class="my-4">
                 
-                <div class="alert alert-success" id="statusBot" style="display: none;">
-                    <i class="bi bi-check-circle me-2"></i>
-                    Bot conectado correctamente
-                </div>
+                <div class="alert" id="statusBot" style="display: none;"></div>
             </div>
         </div>
     </div>
@@ -408,58 +410,14 @@
                                 <th>Acciones</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {% for usuario in usuarios %}
+                        <tbody id="usuariosTable">
                             <tr>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="rounded-circle bg-primary bg-opacity-10 p-2 me-2">
-                                            <i class="bi bi-person text-primary"></i>
-                                        </div>
-                                        <strong>{{ usuario.nombre_completo }}</strong>
-                                    </div>
-                                </td>
-                                <td>{{ usuario.email }}</td>
-                                <td>
-                                    {% if usuario.rol == 'owner' %}
-                                        <span class="badge bg-danger">Owner</span>
-                                    {% elif usuario.rol == 'admin' %}
-                                        <span class="badge bg-primary">Admin</span>
-                                    {% elif usuario.rol == 'staff' %}
-                                        <span class="badge bg-info">Staff</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary">Mesero</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ usuario.telefono or '-' }}</td>
-                                <td>
-                                    {% if usuario.activo %}
-                                        <span class="badge bg-success">Activo</span>
-                                    {% else %}
-                                        <span class="badge bg-danger">Inactivo</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if usuario.ultimo_acceso %}
-                                        <small>{{ usuario.ultimo_acceso.strftime('%d/%m/%Y %H:%M') }}</small>
-                                    {% else %}
-                                        <small class="text-muted">Nunca</small>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <button class="btn btn-outline-primary" onclick="editarUsuario({{ usuario.id }})">
-                                            <i class="bi bi-pencil"></i>
-                                        </button>
-                                        {% if usuario.id != user.id %}
-                                        <button class="btn btn-outline-danger" onclick="eliminarUsuario({{ usuario.id }})">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                        {% endif %}
+                                <td colspan="7" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Cargando...</span>
                                     </div>
                                 </td>
                             </tr>
-                            {% endfor %}
                         </tbody>
                     </table>
                 </div>
@@ -488,7 +446,8 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Contraseña *</label>
-                        <input type="password" class="form-control" name="password" required>
+                        <input type="password" class="form-control" name="password" required minlength="6">
+                        <small class="text-muted">Mínimo 6 caracteres</small>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Teléfono</label>
@@ -518,6 +477,76 @@
 
 {% block extra_js %}
 <script>
+// Cargar usuarios al abrir la pestaña
+document.getElementById('usuarios-tab').addEventListener('click', function() {
+    cargarUsuarios();
+});
+
+function cargarUsuarios() {
+    fetch('/usuarios')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.usuarios) {
+            const tbody = document.getElementById('usuariosTable');
+            tbody.innerHTML = '';
+            
+            if (data.usuarios.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No hay usuarios registrados</td></tr>';
+                return;
+            }
+            
+            data.usuarios.forEach(usuario => {
+                const rolBadges = {
+                    'owner': '<span class="badge bg-danger">Owner</span>',
+                    'admin': '<span class="badge bg-primary">Admin</span>',
+                    'staff': '<span class="badge bg-info">Staff</span>',
+                    'mesero': '<span class="badge bg-secondary">Mesero</span>'
+                };
+                
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="rounded-circle bg-primary bg-opacity-10 p-2 me-2">
+                                <i class="bi bi-person text-primary"></i>
+                            </div>
+                            <strong>${usuario.nombre_completo}</strong>
+                        </div>
+                    </td>
+                    <td>${usuario.email}</td>
+                    <td>${rolBadges[usuario.rol] || usuario.rol}</td>
+                    <td>${usuario.telefono || '-'}</td>
+                    <td>
+                        ${usuario.activo ? 
+                            '<span class="badge bg-success">Activo</span>' : 
+                            '<span class="badge bg-danger">Inactivo</span>'}
+                    </td>
+                    <td>
+                        ${usuario.ultimo_acceso ? 
+                            new Date(usuario.ultimo_acceso).toLocaleString('es-MX') : 
+                            '<small class="text-muted">Nunca</small>'}
+                    </td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            ${usuario.id !== {{ user.id }} ? 
+                                `<button class="btn btn-outline-danger" onclick="eliminarUsuario(${usuario.id})">
+                                    <i class="bi bi-trash"></i>
+                                </button>` : 
+                                '<span class="text-muted">-</span>'}
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('usuariosTable').innerHTML = 
+            '<tr><td colspan="7" class="text-center py-4 text-danger">Error al cargar usuarios</td></tr>';
+    });
+}
+
 // Guardar configuración general
 document.getElementById('formGeneral').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -532,10 +561,15 @@ document.getElementById('formGeneral').addEventListener('submit', function(e) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Configuración guardada exitosamente');
+            alert('✅ Configuración guardada exitosamente');
+            location.reload();
         } else {
-            alert('Error: ' + data.message);
+            alert('❌ Error: ' + data.message);
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error de conexión');
     });
 });
 
@@ -553,8 +587,14 @@ document.getElementById('formDelivery').addEventListener('submit', function(e) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Configuración de delivery guardada');
+            alert('✅ Configuración de delivery guardada');
+        } else {
+            alert('❌ Error: ' + data.message);
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error de conexión');
     });
 });
 
@@ -572,8 +612,14 @@ document.getElementById('formHorarios').addEventListener('submit', function(e) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Horarios guardados exitosamente');
+            alert('✅ Horarios guardados exitosamente');
+        } else {
+            alert('❌ Error: ' + data.message);
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error de conexión');
     });
 });
 
@@ -591,22 +637,40 @@ document.getElementById('formTelegram').addEventListener('submit', function(e) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Configuración de Telegram guardada');
+            alert('✅ Configuración de Telegram guardada');
+        } else {
+            alert('❌ Error: ' + data.message);
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error de conexión');
     });
 });
 
 // Probar bot
 function probarBot() {
+    const statusDiv = document.getElementById('statusBot');
+    statusDiv.style.display = 'none';
+    
     fetch('/telegram/test')
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            document.getElementById('statusBot').style.display = 'block';
-            alert('Bot conectado correctamente ✓');
+            statusDiv.className = 'alert alert-success';
+            statusDiv.innerHTML = '<i class="bi bi-check-circle me-2"></i>' + data.message;
+            statusDiv.style.display = 'block';
+            alert('✅ ' + data.message);
         } else {
-            alert('Error al conectar con el bot: ' + data.message);
+            statusDiv.className = 'alert alert-danger';
+            statusDiv.innerHTML = '<i class="bi bi-x-circle me-2"></i>' + data.message;
+            statusDiv.style.display = 'block';
+            alert('❌ Error: ' + data.message);
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error de conexión al probar el bot');
     });
 }
 
@@ -616,6 +680,11 @@ function guardarUsuario() {
     const formData = new FormData(form);
     const data = Object.fromEntries(formData);
     
+    if (!data.email || !data.password || !data.nombre_completo) {
+        alert('❌ Por favor completa todos los campos requeridos');
+        return;
+    }
+    
     fetch('/usuarios', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -624,31 +693,37 @@ function guardarUsuario() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('Usuario creado exitosamente');
-            location.reload();
+            alert('✅ Usuario creado exitosamente');
+            bootstrap.Modal.getInstance(document.getElementById('modalUsuario')).hide();
+            form.reset();
+            cargarUsuarios();
         } else {
-            alert('Error: ' + data.message);
+            alert('❌ Error: ' + data.message);
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Error de conexión');
     });
 }
 
-function editarUsuario(id) {
-    alert('Función de edición próximamente');
-}
-
 function eliminarUsuario(id) {
-    if (confirm('¿Estás seguro de eliminar este usuario?')) {
+    if (confirm('⚠️ ¿Estás seguro de eliminar este usuario?')) {
         fetch(`/usuarios/${id}`, {
             method: 'DELETE'
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert('Usuario eliminado');
-                location.reload();
+                alert('✅ Usuario eliminado');
+                cargarUsuarios();
             } else {
-                alert('Error al eliminar usuario');
+                alert('❌ Error: ' + data.message);
             }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('❌ Error de conexión');
         });
     }
 }

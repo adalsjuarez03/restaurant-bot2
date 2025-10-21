@@ -50,14 +50,263 @@ def get_current_user():
         }
     return None
 
+# ==================== RUTAS DE REGISTRO PÚBLICO ====================
+# Agregar estas rutas en admin_server.py ANTES de @app.route('/login')
+# Aproximadamente después de la línea 50, antes de las rutas de autenticación
+
+@app.route('/register')
+def register_page():
+    """Página pública de registro de restaurantes"""
+    return render_template('public/register.html')
+
+
+@app.route('/api/register-restaurant', methods=['POST'])
+def register_restaurant():
+    """API para registrar un nuevo restaurante"""
+    try:
+        data = request.get_json()
+        
+        # ✅ Validaciones básicas
+        if not data.get('nombre_restaurante') or not data.get('slug'):
+            return jsonify({
+                'success': False, 
+                'message': 'Nombre y slug son requeridos'
+            }), 400
+        
+        if not data.get('admin_email') or not data.get('password'):
+            return jsonify({
+                'success': False, 
+                'message': 'Email y contraseña del admin son requeridos'
+            }), 400
+        
+        if not data.get('nombre_completo'):
+            return jsonify({
+                'success': False, 
+                'message': 'Nombre completo del administrador es requerido'
+            }), 400
+        
+        # ✅ Verificar que las contraseñas coincidan
+        if data.get('password') != data.get('password_confirm'):
+            return jsonify({
+                'success': False, 
+                'message': 'Las contraseñas no coinciden'
+            }), 400
+        
+        # ✅ Verificar que el slug no exista
+        restaurante_existente = db.get_restaurante_por_slug(data['slug'])
+        if restaurante_existente:
+            return jsonify({
+                'success': False, 
+                'message': 'Esa URL ya está en uso. Por favor elige otra.'
+            }), 400
+        
+        # ✅ Verificar que el email no exista
+        from database.database_multirestaurante import get_db_cursor
+        with get_db_cursor() as (cursor, conn):
+            cursor.execute("SELECT id FROM usuarios_admin WHERE email = %s", (data['admin_email'],))
+            if cursor.fetchone():
+                return jsonify({
+                    'success': False, 
+                    'message': 'Ese email ya está registrado'
+                }), 400
+        
+        # 1️⃣ Crear el restaurante
+        print(f"🏪 Creando restaurante: {data['nombre_restaurante']}")
+        
+        datos_restaurante = {
+            'slug': data['slug'].lower().strip(),
+            'nombre_restaurante': data['nombre_restaurante'].strip(),
+            'descripcion': data.get('descripcion', '').strip() if data.get('descripcion') else None,
+            'telefono': data.get('telefono', '').strip() if data.get('telefono') else None,
+            'email': data.get('email', '').strip() if data.get('email') else None,
+            'direccion': data.get('direccion', '').strip() if data.get('direccion') else None,
+            'ciudad': data.get('ciudad', '').strip() if data.get('ciudad') else None,
+            'estado_republica': data.get('estado_republica', '').strip() if data.get('estado_republica') else None,
+            'plan': data.get('plan', 'gratis')
+        }
+        
+        restaurante_id = db.crear_restaurante(datos_restaurante)
+        
+        if not restaurante_id:
+            return jsonify({
+                'success': False, 
+                'message': 'Error al crear el restaurante. Por favor intenta de nuevo.'
+            }), 500
+        
+        print(f"✅ Restaurante creado con ID: {restaurante_id}")
+        
+        # 2️⃣ Crear usuario administrador
+        print(f"👤 Creando usuario administrador...")
+        
+        usuario_id = db.crear_usuario_admin(
+            restaurante_id=restaurante_id,
+            email=data['admin_email'].strip(),
+            password=data['password'],
+            nombre_completo=data['nombre_completo'].strip(),
+            rol='owner'  # owner tiene todos los permisos
+        )
+        
+        if not usuario_id:
+            # ❌ Si falla, eliminar el restaurante creado (rollback manual)
+            print(f"❌ Error creando usuario, eliminando restaurante...")
+            with get_db_cursor() as (cursor, conn):
+                cursor.execute("DELETE FROM restaurantes WHERE id = %s", (restaurante_id,))
+                conn.commit()
+            
+            return jsonify({
+                'success': False, 
+                'message': 'Error al crear el usuario administrador'
+            }), 500
+        
+        print(f"✅ Usuario creado con ID: {usuario_id}")
+        
+        # 3️⃣ Crear categorías por defecto (opcional pero recomendado)
+        print(f"📂 Creando categorías por defecto...")
+        
+        categorias_default = [
+            {
+                'nombre': 'entradas', 
+                'nombre_display': 'Entradas', 
+                'icono': '🥗', 
+                'orden': 1,
+                'descripcion': 'Platos de entrada y aperitivos'
+            },
+            {
+                'nombre': 'platos_fuertes', 
+                'nombre_display': 'Platos Fuertes', 
+                'icono': '🍽️', 
+                'orden': 2,
+                'descripcion': 'Platos principales'
+            },
+            {
+                'nombre': 'bebidas', 
+                'nombre_display': 'Bebidas', 
+                'icono': '🥤', 
+                'orden': 3,
+                'descripcion': 'Bebidas frías y calientes'
+            },
+            {
+                'nombre': 'postres', 
+                'nombre_display': 'Postres', 
+                'icono': '🍰', 
+                'orden': 4,
+                'descripcion': 'Postres y dulces'
+            }
+        ]
+        
+        categorias_creadas = 0
+        for cat in categorias_default:
+            cat_id = db.crear_categoria(
+                restaurante_id=restaurante_id,
+                nombre=cat['nombre'],
+                nombre_display=cat['nombre_display'],
+                descripcion=cat['descripcion'],
+                icono=cat['icono'],
+                orden=cat['orden']
+            )
+            if cat_id:
+                categorias_creadas += 1
+        
+        print(f"✅ {categorias_creadas} categorías creadas")
+        
+        # 4️⃣ TODO: Enviar email de bienvenida (implementar después)
+        # send_welcome_email(data['admin_email'], data['nombre_restaurante'])
+        
+        # ✅ REGISTRO EXITOSO
+        print("=" * 60)
+        print(f"🎉 RESTAURANTE REGISTRADO EXITOSAMENTE")
+        print(f"   Restaurante: {datos_restaurante['nombre_restaurante']} (ID: {restaurante_id})")
+        print(f"   Usuario: {data['admin_email']} (ID: {usuario_id})")
+        print(f"   Slug: {datos_restaurante['slug']}")
+        print(f"   Plan: {datos_restaurante['plan']}")
+        print("=" * 60)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Restaurante registrado exitosamente',
+            'data': {
+                'restaurante_id': restaurante_id,
+                'usuario_id': usuario_id,
+                'slug': datos_restaurante['slug'],
+                'nombre_restaurante': datos_restaurante['nombre_restaurante']
+            }
+        }), 201
+        
+    except Exception as e:
+        print(f"❌ ERROR EN REGISTRO: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        return jsonify({
+            'success': False, 
+            'message': f'Error interno del servidor: {str(e)}'
+        }), 500
+
+
+@app.route('/api/check-slug/<slug>')
+def check_slug_availability(slug):
+    """Verificar si un slug está disponible (AJAX)"""
+    try:
+        # Validar formato del slug
+        import re
+        if not re.match(r'^[a-z0-9-]+$', slug):
+            return jsonify({
+                'available': False,
+                'message': 'Solo letras minúsculas, números y guiones'
+            })
+        
+        restaurante = db.get_restaurante_por_slug(slug)
+        
+        return jsonify({
+            'available': restaurante is None,
+            'message': '✓ Disponible' if restaurante is None else '✗ Ya está en uso'
+        })
+    except Exception as e:
+        print(f"Error verificando slug: {e}")
+        return jsonify({
+            'success': False, 
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/check-email/<email>')
+def check_email_availability(email):
+    """Verificar si un email está disponible (AJAX)"""
+    try:
+        # Validar formato básico de email
+        import re
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+            return jsonify({
+                'available': False,
+                'message': 'Formato de email inválido'
+            })
+        
+        from database.database_multirestaurante import get_db_cursor
+        with get_db_cursor() as (cursor, conn):
+            cursor.execute("SELECT id FROM usuarios_admin WHERE email = %s", (email,))
+            exists = cursor.fetchone() is not None
+        
+        return jsonify({
+            'available': not exists,
+            'message': '✓ Disponible' if not exists else '✗ Ya está registrado'
+        })
+    except Exception as e:
+        print(f"Error verificando email: {e}")
+        return jsonify({
+            'success': False, 
+            'message': str(e)
+        }), 500
+
+
+# ==================== FIN DE RUTAS DE REGISTRO ====================
 # ==================== RUTAS DE AUTENTICACIÓN ====================
 
 @app.route('/')
 def index():
-    """Página principal - redirige según autenticación"""
+    """Página principal - landing page pública"""
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
-    return redirect(url_for('login'))
+    return render_template('public/landing.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -330,8 +579,6 @@ def ver_pedido(pedido_id):
 
 # ==================== GESTIÓN DE RESERVACIONES ====================
 
-# ==================== GESTIÓN DE RESERVACIONES ====================
-
 @app.route('/reservaciones', methods=['GET', 'POST'])
 @login_required
 def reservaciones():
@@ -484,6 +731,291 @@ def configuracion():
                          user=user,
                          restaurante=restaurante)
 
+# ==================== RUTAS DE CONFIGURACIÓN ====================
+# Agregar estas rutas en admin_server.py después de la ruta @app.route('/configuracion')
+
+@app.route('/configuracion/general', methods=['PUT'])
+@login_required
+def actualizar_configuracion_general():
+    """Actualizar configuración general del restaurante"""
+    try:
+        user = get_current_user()
+        restaurante_id = user['restaurante_id']
+        data = request.get_json()
+        
+        success = db.actualizar_restaurante(restaurante_id, data)
+        
+        if success:
+            # Actualizar nombre en sesión si cambió
+            if 'nombre_restaurante' in data:
+                session['restaurante_nombre'] = data['nombre_restaurante']
+            
+            return jsonify({'success': True, 'message': 'Configuración actualizada correctamente'})
+        else:
+            return jsonify({'success': False, 'message': 'Error al actualizar'}), 500
+            
+    except Exception as e:
+        print(f"❌ Error actualizando configuración: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/configuracion/delivery', methods=['PUT'])
+@login_required
+def actualizar_configuracion_delivery():
+    """Actualizar configuración de delivery"""
+    try:
+        user = get_current_user()
+        restaurante_id = user['restaurante_id']
+        data = request.get_json()
+        
+        # Construir JSON de configuración de delivery
+        config_delivery = {
+            'activo': data.get('delivery_activo', 'false') == 'true',
+            'costo_envio_base': float(data.get('costo_envio_base', 0)),
+            'pedido_minimo': float(data.get('pedido_minimo', 0)),
+            'envio_gratis_desde': float(data.get('envio_gratis_desde', 0)),
+            'radio_cobertura': float(data.get('radio_cobertura', 5)),
+            'tiempo_entrega': data.get('tiempo_entrega', '30-45 minutos'),
+            'zonas_cobertura': data.get('zonas_cobertura', '').split('\n') if data.get('zonas_cobertura') else []
+        }
+        
+        # Actualizar en la BD
+        success = db.actualizar_restaurante(restaurante_id, {
+            'config_delivery': json.dumps(config_delivery)
+        })
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Configuración de delivery actualizada'})
+        else:
+            return jsonify({'success': False, 'message': 'Error al actualizar'}), 500
+            
+    except Exception as e:
+        print(f"❌ Error actualizando delivery: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/configuracion/horarios', methods=['PUT'])
+@login_required
+def actualizar_configuracion_horarios():
+    """Actualizar horarios del restaurante"""
+    try:
+        user = get_current_user()
+        restaurante_id = user['restaurante_id']
+        data = request.get_json()
+        
+        # Construir JSON de horarios
+        dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo']
+        horarios = {}
+        
+        for dia in dias:
+            activo = data.get(f'activo_{dia}') == 'on'
+            es_24h = data.get(f'24h_{dia}') == 'on'
+            
+            if activo:
+                if es_24h:
+                    horarios[dia] = {
+                        'activo': True,
+                        'apertura': '00:00',
+                        'cierre': '23:59',
+                        '24h': True
+                    }
+                else:
+                    horarios[dia] = {
+                        'activo': True,
+                        'apertura': data.get(f'apertura_{dia}', '09:00'),
+                        'cierre': data.get(f'cierre_{dia}', '22:00'),
+                        '24h': False
+                    }
+            else:
+                horarios[dia] = {
+                    'activo': False
+                }
+        
+        # Actualizar en la BD
+        success = db.actualizar_restaurante(restaurante_id, {
+            'horarios': json.dumps(horarios)
+        })
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Horarios actualizados correctamente'})
+        else:
+            return jsonify({'success': False, 'message': 'Error al actualizar'}), 500
+            
+    except Exception as e:
+        print(f"❌ Error actualizando horarios: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/configuracion/telegram', methods=['PUT'])
+@login_required
+def actualizar_configuracion_telegram():
+    """Actualizar configuración de Telegram"""
+    try:
+        user = get_current_user()
+        restaurante_id = user['restaurante_id']
+        data = request.get_json()
+        
+        # Construir datos de telegram
+        datos_telegram = {}
+        
+        if data.get('bot_token'):
+            datos_telegram['bot_token'] = data['bot_token'].strip()
+        
+        if data.get('telegram_admin_id'):
+            datos_telegram['telegram_admin_id'] = data['telegram_admin_id'].strip()
+        
+        if data.get('telegram_group_id'):
+            datos_telegram['telegram_group_id'] = data['telegram_group_id'].strip()
+        
+        # Guardar configuración de notificaciones
+        config_notificaciones = {
+            'notificar_pedidos': data.get('notificar_pedidos') == 'on',
+            'notificar_reservaciones': data.get('notificar_reservaciones') == 'on'
+        }
+        datos_telegram['config_notificaciones'] = json.dumps(config_notificaciones)
+        
+        # Actualizar en la BD
+        success = db.actualizar_restaurante(restaurante_id, datos_telegram)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Configuración de Telegram actualizada'})
+        else:
+            return jsonify({'success': False, 'message': 'Error al actualizar'}), 500
+            
+    except Exception as e:
+        print(f"❌ Error actualizando Telegram: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/telegram/test')
+@login_required
+def test_telegram_bot():
+    """Probar conexión con el bot de Telegram"""
+    try:
+        user = get_current_user()
+        restaurante_id = user['restaurante_id']
+        
+        # Obtener el bot token del restaurante
+        from database.database_multirestaurante import get_db_cursor
+        with get_db_cursor() as (cursor, conn):
+            cursor.execute("SELECT bot_token FROM restaurantes WHERE id = %s", (restaurante_id,))
+            result = cursor.fetchone()
+        
+        if not result or not result['bot_token']:
+            return jsonify({'success': False, 'message': 'No hay bot token configurado'})
+        
+        bot_token = result['bot_token']
+        
+        # Intentar obtener info del bot
+        import requests
+        response = requests.get(f'https://api.telegram.org/bot{bot_token}/getMe', timeout=5)
+        
+        if response.status_code == 200:
+            bot_info = response.json()
+            if bot_info.get('ok'):
+                return jsonify({
+                    'success': True, 
+                    'message': f'Bot conectado: @{bot_info["result"]["username"]}'
+                })
+        
+        return jsonify({'success': False, 'message': 'Token inválido o bot no accesible'})
+        
+    except Exception as e:
+        print(f"❌ Error probando bot: {e}")
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/usuarios', methods=['GET', 'POST'])
+@login_required
+def gestionar_usuarios():
+    """Gestionar usuarios del restaurante"""
+    user = get_current_user()
+    restaurante_id = user['restaurante_id']
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            
+            # Crear nuevo usuario
+            usuario_id = db.crear_usuario_admin(
+                restaurante_id=restaurante_id,
+                email=data['email'],
+                password=data['password'],
+                nombre_completo=data['nombre_completo'],
+                rol=data.get('rol', 'staff')
+            )
+            
+            if usuario_id:
+                # Agregar teléfono si se proporcionó
+                if data.get('telefono'):
+                    from database.database_multirestaurante import get_db_cursor
+                    with get_db_cursor() as (cursor, conn):
+                        cursor.execute("""
+                            UPDATE usuarios_admin 
+                            SET telefono = %s 
+                            WHERE id = %s
+                        """, (data['telefono'], usuario_id))
+                        conn.commit()
+                
+                return jsonify({'success': True, 'message': 'Usuario creado', 'id': usuario_id})
+            else:
+                return jsonify({'success': False, 'message': 'Error al crear usuario'}), 500
+                
+        except Exception as e:
+            print(f"❌ Error creando usuario: {e}")
+            return jsonify({'success': False, 'message': str(e)}), 500
+    
+    # GET - listar usuarios
+    from database.database_multirestaurante import get_db_cursor
+    with get_db_cursor() as (cursor, conn):
+        cursor.execute("""
+            SELECT id, email, nombre_completo, rol, telefono, activo, ultimo_acceso, created_at
+            FROM usuarios_admin
+            WHERE restaurante_id = %s
+            ORDER BY created_at DESC
+        """, (restaurante_id,))
+        usuarios = cursor.fetchall()
+    
+    return jsonify({'success': True, 'usuarios': usuarios})
+
+
+@app.route('/usuarios/<int:usuario_id>', methods=['DELETE'])
+@login_required
+def eliminar_usuario(usuario_id):
+    """Eliminar (desactivar) un usuario"""
+    try:
+        user = get_current_user()
+        
+        # No permitir que se elimine a sí mismo
+        if usuario_id == user['id']:
+            return jsonify({'success': False, 'message': 'No puedes eliminarte a ti mismo'}), 400
+        
+        # Desactivar usuario
+        from database.database_multirestaurante import get_db_cursor
+        with get_db_cursor() as (cursor, conn):
+            cursor.execute("""
+                UPDATE usuarios_admin 
+                SET activo = FALSE 
+                WHERE id = %s AND restaurante_id = %s
+            """, (usuario_id, user['restaurante_id']))
+            conn.commit()
+        
+        return jsonify({'success': True, 'message': 'Usuario eliminado'})
+        
+    except Exception as e:
+        print(f"❌ Error eliminando usuario: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ==================== FIN DE RUTAS DE CONFIGURACIÓN ====================
 # ==================== API ENDPOINTS ====================
 
 @app.route('/api/stats')
