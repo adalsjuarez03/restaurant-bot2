@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🍽️ Restaurante Delizioso - Chat</title>
+    <title>🍽️ {{ restaurante.nombre_restaurante }} - Chat</title>
     <style>
         * {
             margin: 0;
@@ -24,7 +24,8 @@
         .chat-container {
             width: 100%;
             max-width: 500px;
-            height: 700px;
+            height: 90vh;
+            max-height: 800px;
             background: white;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -302,12 +303,26 @@
         @media (max-width: 600px) {
             .chat-container {
                 height: 100vh;
+                max-height: 100vh;
                 max-width: 100%;
                 border-radius: 0;
             }
 
             body {
                 padding: 0;
+            }
+
+            .chat-header {
+                padding: 15px;
+            }
+
+            .chat-header img {
+                width: 40px;
+                height: 40px;
+            }
+
+            .chat-header-info h2 {
+                font-size: 18px;
             }
         }
     </style>
@@ -316,9 +331,9 @@
     <div class="chat-container">
         <!-- Header del Chat -->
         <div class="chat-header">
-            <img src="https://www.shutterstock.com/image-vector/restaurant-logo-food-service-vector-600w-454784548.jpg" alt="Delizioso">
+            <img src="https://www.shutterstock.com/image-vector/restaurant-logo-food-service-vector-600w-454784548.jpg" alt="{{ restaurante.nombre_restaurante }}">
             <div class="chat-header-info">
-                <h2>🍽️ Restaurante Giants</h2>
+                <h2>🍽️ {{ restaurante.nombre_restaurante }}</h2>
                 <p><span class="status-indicator"></span>En línea - Responde al instante</p>
             </div>
         </div>
@@ -336,9 +351,9 @@
         <!-- Mensajes del Chat -->
         <div class="chat-messages" id="chatMessages">
             <div class="welcome-message">
-                <h3>¡Bienvenido! </h3>
-                <p>Bienvenido a <strong>Restaurante Giants</strong><br>
-                Tu experiencia culinaria italiana auténtica.<br><br>
+                <h3>¡Bienvenido!</h3>
+                <p>Bienvenido a <strong>{{ restaurante.nombre_restaurante }}</strong><br>
+                Tu experiencia culinaria auténtica.<br><br>
                 ¿En qué puedo ayudarte hoy?</p>
             </div>
         </div>
@@ -368,6 +383,11 @@
     <script>
         const API_URL = 'http://localhost:5000/api';
         const sessionId = 'web_' + Date.now();
+        
+        // ✅ NUEVO: Slug del restaurante desde el servidor
+        const restauranteSlug = "{{ restaurante.slug }}";
+        const restauranteNombre = "{{ restaurante.nombre_restaurante }}";
+        
         const chatMessages = document.getElementById('chatMessages');
         const chatInput = document.getElementById('chatInput');
         const sendButton = document.getElementById('sendButton');
@@ -408,7 +428,8 @@
                     },
                     body: JSON.stringify({
                         message: message,
-                        session_id: sessionId
+                        session_id: sessionId,
+                        restaurante_slug: restauranteSlug  // ✅ NUEVO
                     })
                 })
                 .then(response => response.json())
@@ -470,14 +491,9 @@
         // Auto-focus en el input al cargar
         window.addEventListener('load', () => {
             chatInput.focus();
+            console.log('✅ Chat cargado para:', restauranteNombre);
+            console.log('🔗 Slug:', restauranteSlug);
         });
-
-        // Sonido de notificación (opcional)
-        function playNotificationSound() {
-            // Puedes agregar un sonido aquí si lo deseas
-            // const audio = new Audio('notification.mp3');
-            // audio.play();
-        }
     </script>
 </body>
 </html>

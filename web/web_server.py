@@ -1,7 +1,7 @@
 """
 Servidor Web para interactuar con el Bot de Telegram
 Conecta la interfaz web con el bot de Telegram y la base de datos
-VERSIÓN DINÁMICA - Sin datos hardcodeados
+VERSIÓN MULTI-RESTAURANTE - Dinámico por Slug
 """
 import sys
 import os
@@ -9,16 +9,13 @@ import unicodedata
 
 def normalizar_texto(texto):
     """Eliminar tildes y normalizar texto para búsquedas"""
-    # Convertir a minúsculas
     texto = texto.lower()
-    # Eliminar tildes
     texto = ''.join(
         c for c in unicodedata.normalize('NFD', texto)
         if unicodedata.category(c) != 'Mn'
     )
     return texto
 
-# Agregar la carpeta raíz del proyecto al path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, render_template, request, jsonify
@@ -35,18 +32,17 @@ from datetime import datetime
 app = Flask(__name__)
 CORS(app)
 
-# Inicializar bot y base de datos
 bot = telebot.TeleBot(BOT_TOKEN)
 message_handlers = RestaurantMessageHandlers(bot)
 db = DatabaseManager()
 
-# Almacenar sesiones de chat
 chat_sessions = {}
 
 class WebChatSession:
     """Simular una sesión de chat para usuarios web"""
-    def __init__(self, session_id):
+    def __init__(self, session_id, restaurante_id):
         self.session_id = session_id
+        self.restaurante_id = restaurante_id
         self.messages = []
         self.user_id = hash(session_id) % 1000000
         self.created_at = datetime.now()
@@ -60,7 +56,6 @@ class WebChatSession:
         self.registration_step = "needs_name"
         self.is_registered = False
         
-        # Variables para reservaciones
         self.reservation_step = None
         self.reservation_date = None
         self.reservation_time = None
@@ -100,7 +95,7 @@ class MockUser:
         self.username = "web_user"
 
 def send_notification_to_group(notification_type, data, session):
-    """Enviar notificación al grupo de Telegram - ACTUALIZADO"""
+    """Enviar notificación al grupo de Telegram"""
     try:
         target_chat = CHAT_IDS.get("cocina") or CHAT_IDS.get("grupo_restaurante") or CHAT_IDS.get("admin")
         
@@ -188,7 +183,6 @@ def send_notification_to_group(notification_type, data, session):
 def process_reservacion_flow(session, text_lower, text):
     """Procesar el flujo de reservaciones"""
     
-    # Detectar intención de reservar
     if any(word in text_lower for word in ['reservar', 'reserva', 'reservación', 'mesa', 'apartar']):
         if not session.is_registered:
             return "Para hacer una reservación, primero necesito que te registres. Escribe cualquier cosa para comenzar."
@@ -201,10 +195,8 @@ def process_reservacion_flow(session, text_lower, text):
 
 Ejemplo: 25/10/2025"""
     
-    # Flujo de reservación activo
     if hasattr(session, 'reservation_step'):
         
-        # Paso 1: Capturar fecha
         if session.reservation_step == "waiting_date":
             from datetime import datetime, timedelta
             
@@ -219,7 +211,6 @@ Ejemplo: 25/10/2025"""
                 except:
                     return "❌ Formato de fecha incorrecto. Por favor usa DD/MM/AAAA\nEjemplo: 25/10/2025"
             
-            # Validar que la fecha no sea pasada
             if fecha < datetime.now().date():
                 return "❌ No puedes reservar para una fecha pasada. Por favor elige una fecha futura."
             
@@ -233,15 +224,10 @@ Ejemplo: 25/10/2025"""
 
 Ejemplo: 19:00 o 20:30"""
         
-        # Paso 2: Capturar hora
         elif session.reservation_step == "waiting_time":
             try:
                 from datetime import datetime
                 hora_obj = datetime.strptime(text, '%H:%M').time()
-                
-                # Validar horario del restaurante
-                from config import RESTAURANT_CONFIG
-                horarios = RESTAURANT_CONFIG.get('horarios_reservacion', [])
                 
                 session.reservation_time = hora_obj
                 session.reservation_step = "waiting_people"
@@ -255,7 +241,6 @@ Ejemplo: 4"""
             except:
                 return "❌ Formato de hora incorrecto. Por favor usa HH:MM\nEjemplo: 19:00"
         
-        # Paso 3: Capturar número de personas
         elif session.reservation_step == "waiting_people":
             try:
                 personas = int(text)
@@ -279,7 +264,6 @@ Elige una opción o escribe 'ninguna':
             except:
                 return "❌ Por favor escribe solo el número de personas.\nEjemplo: 4"
         
-        # Paso 4: Ocasión especial
         elif session.reservation_step == "waiting_occasion":
             ocasiones = {
                 '1': 'Cumpleaños',
@@ -302,13 +286,11 @@ Elige una opción o escribe 'ninguna':
 
 Escribe 'no' si no tienes notas especiales."""
         
-        # Paso 5: Notas especiales
         elif session.reservation_step == "waiting_notes":
             notas = None if text_lower in ['no', 'ninguna', 'nada'] else text
             session.reservation_notes = notas
             session.reservation_step = "confirm"
             
-            # Mostrar resumen
             from datetime import datetime
             fecha_formato = session.reservation_date.strftime('%d/%m/%Y')
             hora_formato = session.reservation_time.strftime('%H:%M')
@@ -332,21 +314,16 @@ Escribe 'no' si no tienes notas especiales."""
             
             return resumen
         
-        # Paso 6: Confirmar reservación
         elif session.reservation_step == "confirm":
             if 'confirmar' in text_lower:
-                # 🔥 GUARDAR DATOS ANTES DE BORRARLOS
                 fecha_guardada = session.reservation_date
                 hora_guardada = session.reservation_time
                 personas_guardadas = session.reservation_people
                 ocasion_guardada = session.reservation_occasion
                 notas_guardadas = session.reservation_notes
         
-                # Crear reservación en la BD
-                restaurante_id = 1  # TODO: Obtener dinámicamente
-        
                 reservacion = db.crear_reservacion(
-                    restaurante_id=restaurante_id,
+                    restaurante_id=session.restaurante_id,
                     cliente_id=session.cliente_id,
                     nombre=session.customer_name,
                     telefono=session.customer_phone,
@@ -354,32 +331,29 @@ Escribe 'no' si no tienes notas especiales."""
                     hora=hora_guardada,
                     personas=personas_guardadas,
                     origen='web'
-            )
+                )
         
-            if reservacion:
-                # Actualizar ocasión y notas si existen
-                if ocasion_guardada or notas_guardadas:
-                    from database.database_multirestaurante import get_db_cursor
-                    with get_db_cursor() as (cursor, conn):
-                        cursor.execute("""
-                            UPDATE reservaciones 
-                            SET ocasion_especial = %s, notas_especiales = %s
-                            WHERE id = %s
-                        """, (ocasion_guardada, notas_guardadas, reservacion['id']))
-                        conn.commit()
+                if reservacion:
+                    if ocasion_guardada or notas_guardadas:
+                        from database.database_multirestaurante import get_db_cursor
+                        with get_db_cursor() as (cursor, conn):
+                            cursor.execute("""
+                                UPDATE reservaciones 
+                                SET ocasion_especial = %s, notas_especiales = %s
+                                WHERE id = %s
+                            """, (ocasion_guardada, notas_guardadas, reservacion['id']))
+                            conn.commit()
             
-                # Enviar notificación al grupo de Telegram
-                send_notification_to_group("new_reservation", {
-                    'reservacion': reservacion,
-                    'fecha': fecha_guardada.strftime('%d/%m/%Y'),
-                    'hora': hora_guardada.strftime('%H:%M'),
-                    'personas': personas_guardadas,
-                    'ocasion': ocasion_guardada,
-                    'notas': notas_guardadas
-                }, session)
+                    send_notification_to_group("new_reservation", {
+                        'reservacion': reservacion,
+                        'fecha': fecha_guardada.strftime('%d/%m/%Y'),
+                        'hora': hora_guardada.strftime('%H:%M'),
+                        'personas': personas_guardadas,
+                        'ocasion': ocasion_guardada,
+                        'notas': notas_guardadas
+                    }, session)
             
-                # 🎉 CREAR MENSAJE DE CONFIRMACIÓN ANTES DE BORRAR
-                mensaje_confirmacion = f"""✅ ¡RESERVACIÓN CONFIRMADA!
+                    mensaje_confirmacion = f"""✅ ¡RESERVACIÓN CONFIRMADA!
 
 🎫 Código: {reservacion['codigo_reservacion']}
 
@@ -388,13 +362,13 @@ Escribe 'no' si no tienes notas especiales."""
 👤 A nombre de: {session.customer_name}
 📱 Teléfono: {session.customer_phone}"""
 
-                if ocasion_guardada:
-                    mensaje_confirmacion += f"\n🎉 Ocasión: {ocasion_guardada}"
+                    if ocasion_guardada:
+                        mensaje_confirmacion += f"\n🎉 Ocasión: {ocasion_guardada}"
             
-                if notas_guardadas:
-                    mensaje_confirmacion += f"\n📝 Notas: {notas_guardadas}"
+                    if notas_guardadas:
+                        mensaje_confirmacion += f"\n📝 Notas: {notas_guardadas}"
 
-                mensaje_confirmacion += """
+                    mensaje_confirmacion += """
 
 📞 CONFIRMACIÓN:
 Te contactaremos al número registrado para confirmar tu reservación.
@@ -409,43 +383,68 @@ Te contactaremos al número registrado para confirmar tu reservación.
 Escribe 'menú' para hacer un pedido
 Escribe 'reservar' para hacer otra reservación"""
             
-                # AHORA SÍ, limpiar datos de reservación
-                delattr(session, 'reservation_step')
-                delattr(session, 'reservation_date')
-                delattr(session, 'reservation_time')
-                delattr(session, 'reservation_people')
-                delattr(session, 'reservation_occasion')
-                delattr(session, 'reservation_notes')
+                    delattr(session, 'reservation_step')
+                    delattr(session, 'reservation_date')
+                    delattr(session, 'reservation_time')
+                    delattr(session, 'reservation_people')
+                    delattr(session, 'reservation_occasion')
+                    delattr(session, 'reservation_notes')
             
-                return mensaje_confirmacion
-            else:
-                # Limpiar y resetear
+                    return mensaje_confirmacion
+                else:
+                    if hasattr(session, 'reservation_step'):
+                        delattr(session, 'reservation_step')
+                    return "❌ Error al crear la reservación. Por favor intenta de nuevo o contáctanos directamente."
+    
+            elif 'cancelar' in text_lower:
                 if hasattr(session, 'reservation_step'):
                     delattr(session, 'reservation_step')
-                return "❌ Error al crear la reservación. Por favor intenta de nuevo o contáctanos directamente."
-    
-        elif 'cancelar' in text_lower:
-            # Limpiar datos
-            if hasattr(session, 'reservation_step'):
-                delattr(session, 'reservation_step')
-                if hasattr(session, 'reservation_date'):
-                    delattr(session, 'reservation_date')
-                if hasattr(session, 'reservation_time'):
-                    delattr(session, 'reservation_time')
-                if hasattr(session, 'reservation_people'):
-                    delattr(session, 'reservation_people')
-                if hasattr(session, 'reservation_occasion'):
-                    delattr(session, 'reservation_occasion')
-                if hasattr(session, 'reservation_notes'):
-                    delattr(session, 'reservation_notes')
+                    if hasattr(session, 'reservation_date'):
+                        delattr(session, 'reservation_date')
+                    if hasattr(session, 'reservation_time'):
+                        delattr(session, 'reservation_time')
+                    if hasattr(session, 'reservation_people'):
+                        delattr(session, 'reservation_people')
+                    if hasattr(session, 'reservation_occasion'):
+                        delattr(session, 'reservation_occasion')
+                    if hasattr(session, 'reservation_notes'):
+                        delattr(session, 'reservation_notes')
         
-            return "❌ Reservación cancelada.\n\nEscribe 'reservar' para intentar de nuevo."
+                return "❌ Reservación cancelada.\n\nEscribe 'reservar' para intentar de nuevo."
     
-    return None  # No es flujo de reservación
-
+    return None
 @app.route('/')
-def index():
-    return render_template('public/chat.html')
+def home():
+    """Redirigir al primer restaurante o mostrar mensaje"""
+    from flask import redirect
+    from database.database_multirestaurante import get_db_cursor
+    
+    with get_db_cursor() as (cursor, conn):
+        cursor.execute("""
+            SELECT slug FROM restaurantes 
+            WHERE estado = 'activo' 
+            ORDER BY id ASC LIMIT 1
+        """)
+        restaurante = cursor.fetchone()
+    
+    if restaurante:
+        return redirect(f"/{restaurante['slug']}/")
+    
+    return "<h1>Acceso no autorizado</h1>", 403
+
+@app.route('/<slug>/')
+def index(slug):
+    """Chat del restaurante según su slug"""
+    restaurante = db.get_restaurante_por_slug(slug)
+    
+    if not restaurante:
+        return """
+        <h1>❌ Restaurante no encontrado</h1>
+        <p>El restaurante que buscas no existe o está inactivo.</p>
+        <p><a href="http://localhost:5001/register">¿Quieres registrar tu restaurante?</a></p>
+        """, 404
+    
+    return render_template('public/chat.html', restaurante=restaurante)
 
 @app.route('/api/send_message', methods=['POST'])
 def send_message():
@@ -454,11 +453,26 @@ def send_message():
         message_text = data.get('message', '')
         session_id = data.get('session_id', 'default')
         
+        # ✅ Obtener slug del restaurante
+        restaurante_slug = data.get('restaurante_slug')
+        
+        if not restaurante_slug:
+            return jsonify({"error": "Falta restaurante_slug"}), 400
+        
+        # Obtener restaurante por slug
+        restaurante = db.get_restaurante_por_slug(restaurante_slug)
+        
+        if not restaurante:
+            return jsonify({"error": "Restaurante no encontrado"}), 404
+        
+        restaurante_id = restaurante['id']
+        
         if not message_text:
             return jsonify({"error": "Mensaje vacío"}), 400
         
+        # Crear o recuperar sesión con restaurante_id
         if session_id not in chat_sessions:
-            chat_sessions[session_id] = WebChatSession(session_id)
+            chat_sessions[session_id] = WebChatSession(session_id, restaurante_id)
         
         session = chat_sessions[session_id]
         session.add_message(message_text, is_user=True)
@@ -469,18 +483,18 @@ def send_message():
             user_id=session.user_id
         )
         
-        # Obtener respuesta del bot
-        bot_response = process_bot_message(mock_message, session)
+        # Obtener respuesta del bot (PASAR restaurante_id)
+        bot_response = process_bot_message(mock_message, session, restaurante_id)
         session.add_message(bot_response, is_user=False)
         
-        # ✅ Registrar interacción COMPLETA en la base de datos (CON respuesta)
+        # Registrar interacción
         if session.cliente_id:
             db.registrar_interaccion(
                 cliente_id=session.cliente_id,
                 mensaje=message_text,
                 respuesta=bot_response,
                 tipo='web',
-                restaurante_id=1  # Ajusta según tu configuración
+                restaurante_id=restaurante_id
             )
         
         important_keywords = ['pedido', 'problema', 'queja', 'urgente', 'ayuda']
@@ -528,17 +542,19 @@ def clear_history():
     
     return jsonify({"success": True})
 
-def generar_respuesta_dinamica(session, text_lower, restaurante_id=1):
-    """Generar respuestas dinámicas desde la base de datos - ÚNICA FUENTE DE VERDAD"""
+def generar_respuesta_dinamica(session, text_lower, restaurante_id):
+    """Generar respuestas dinámicas desde la base de datos"""
     
-    # MENÚ COMPLETO
     if any(word in text_lower for word in ['menu', 'menú', 'carta', 'comida', 'platillos']):
         menu_completo = db.get_menu_completo_display(restaurante_id)
         
         if not menu_completo:
             return "❌ Lo siento, no hay menú disponible en este momento."
         
-        respuesta = f"🍽 ¡Bienvenido a {RESTAURANT_CONFIG['nombre']}!\n\nEstas son nuestras categorías disponibles:\n\n"
+        restaurante = db.get_restaurante_por_slug(session.restaurante_id) if hasattr(session, 'restaurante_id') else None
+        nombre_restaurante = restaurante['nombre_restaurante'] if restaurante else "Nuestro Restaurante"
+        
+        respuesta = f"🍽 ¡Bienvenido a {nombre_restaurante}!\n\nEstas son nuestras categorías disponibles:\n\n"
         
         for idx, cat_data in enumerate(menu_completo, 1):
             cat = cat_data['categoria']
@@ -559,7 +575,6 @@ def generar_respuesta_dinamica(session, text_lower, restaurante_id=1):
         respuesta += "💡 Escribe el número de la categoría que te interesa\nEjemplo: '1' para ver la primera categoría"
         return respuesta
     
-    # VER CATEGORÍA ESPECÍFICA
     if text_lower.isdigit():
         num = int(text_lower)
         menu_completo = db.get_menu_completo_display(restaurante_id)
@@ -586,28 +601,23 @@ def generar_respuesta_dinamica(session, text_lower, restaurante_id=1):
             respuesta += "📙 Escribe 'menú' para regresar"
             return respuesta
     
-    # BUSCAR Y AGREGAR AL CARRITO
     if any(word in text_lower for word in ['quiero', 'pedir', 'ordenar', 'me gustaría']):
-        # Extraer el nombre del platillo (quitar palabras de acción)
         palabras_remover = ['quiero', 'pedir', 'ordenar', 'me gustaría', 'me gustaria', 'dame', 'un', 'una', 'el', 'la', 'los', 'las']
         texto_busqueda = text_lower
         for palabra in palabras_remover:
             texto_busqueda = texto_busqueda.replace(palabra, '')
         texto_busqueda = texto_busqueda.strip()
 
-        # Buscar item en la BD de forma dinámica
         items_encontrados = db.buscar_items_por_texto(restaurante_id, texto_busqueda)
     
         if not items_encontrados:
             return "🤔 No logré identificar ese platillo.\n\nPor favor, escribe 'menú' para ver todas las opciones disponibles."
     
-        # Tomar el primer resultado
         item = items_encontrados[0]
     
         if not item['disponible']:
             return f"😔 Lo siento, *{item['nombre']}* está temporalmente agotado.\n\nEscribe 'menú' para ver otras opciones."
     
-        # Agregar al carrito
         platillo = {
             'id': item['id'],
             'codigo': item['codigo'],
@@ -633,7 +643,6 @@ def generar_respuesta_dinamica(session, text_lower, restaurante_id=1):
     
         return respuesta
     
-    # PRECIOS DINÁMICOS - Calculados desde la BD
     if any(word in text_lower for word in ['precio', 'precios', 'costo', 'cuanto', 'cuánto', 'barato', 'caro']):
         menu_completo = db.get_menu_completo_display(restaurante_id)
         
@@ -663,41 +672,44 @@ def generar_respuesta_dinamica(session, text_lower, restaurante_id=1):
         
         return respuesta
     
-    # Si no coincide nada, retornar None para continuar con otros handlers
     return None
 
-def process_bot_message(mock_message, session):
+def process_bot_message(mock_message, session, restaurante_id):
     """Procesar mensaje y obtener respuesta del bot"""
     try:
         text = mock_message.text.strip()
         text_lower = text.lower()
         
-        # ✅ DEFINIR RESTAURANTE_ID
-        restaurante_id = 1  # TODO: Obtener dinámicamente según configuración/sesión
-        # ✅ PROCESAR RESERVACIONES (antes del registro)
         if session.is_registered:
             reservacion_response = process_reservacion_flow(session, text_lower, text)
             if reservacion_response:
                 return reservacion_response
         
-        # PROCESAR FLUJO DE RESERVACIÓN (ALTA PRIORIDAD)
         reservacion_response = process_reservacion_flow(session, text_lower, text)
         if reservacion_response:
             return reservacion_response
         
-        # PROCESO DE REGISTRO DE USUARIO
         if not session.is_registered:
             
-            # Paso 1: Pedir nombre
             if session.registration_step == "needs_name":
                 session.registration_step = "waiting_name"
-                return f"""¡Hola! Bienvenido a {RESTAURANT_CONFIG['nombre']} 🍽
+                
+                restaurante = None
+                from database.database_multirestaurante import get_db_cursor
+                with get_db_cursor() as (cursor, conn):
+                    cursor.execute("SELECT nombre_restaurante FROM restaurantes WHERE id = %s", (restaurante_id,))
+                    result = cursor.fetchone()
+                    if result:
+                        restaurante = result
+                
+                nombre_rest = restaurante['nombre_restaurante'] if restaurante else "nuestro restaurante"
+                
+                return f"""¡Hola! Bienvenido a {nombre_rest} 🍽
 
 Antes de empezar, necesito conocerte un poco mejor.
 
 👤 Por favor, dime tu nombre completo:"""
             
-            # Paso 2: Guardar nombre y pedir teléfono
             elif session.registration_step == "waiting_name":
                 if len(text) < 3:
                     return "❌ Por favor ingresa un nombre válido (mínimo 3 caracteres)"
@@ -709,7 +721,6 @@ Antes de empezar, necesito conocerte un poco mejor.
 📱 Ahora, ¿cuál es tu número de teléfono?
 (Ejemplo: 9611234567)"""
             
-            # Paso 3: Guardar teléfono y pedir dirección
             elif session.registration_step == "waiting_phone":
                 phone_clean = text.replace(" ", "").replace("-", "")
                 if not phone_clean.isdigit() or len(phone_clean) < 10:
@@ -722,7 +733,6 @@ Antes de empezar, necesito conocerte un poco mejor.
 📍 ¿Cuál es tu dirección de entrega?
 (Calle, número, colonia)"""
             
-            # Paso 4: Guardar dirección, crear cliente y completar registro
             elif session.registration_step == "waiting_address":
                 if len(text) < 10:
                     return "❌ Por favor proporciona una dirección más completa"
@@ -730,16 +740,15 @@ Antes de empezar, necesito conocerte un poco mejor.
                 session.customer_address = text
                 
                 cliente = db.get_or_create_cliente(
-                web_session_id=session.session_id,
-                nombre=session.customer_name,
-                restaurante_id=restaurante_id,  # ✅ AGREGAR ESTA LÍNEA
-                origen="web"
-)
+                    web_session_id=session.session_id,
+                    nombre=session.customer_name,
+                    restaurante_id=restaurante_id,
+                    origen="web"
+                )
                 
                 if cliente:
                     session.cliente_id = cliente['id']
                     
-                    # Actualizar datos del cliente
                     db.actualizar_cliente(
                         session.cliente_id,
                         telefono=session.customer_phone,
@@ -762,14 +771,10 @@ Escribe "menu" para ver nuestras deliciosas opciones 🍽"""
                 else:
                     return "❌ Error al registrar tus datos. Por favor intenta de nuevo."
         
-        # SI YA ESTÁ REGISTRADO, PROCESAR NORMALMENTE
-        
-        # ✅ USAR RESPUESTA DINÁMICA (PRIORIDAD)
         respuesta_dinamica = generar_respuesta_dinamica(session, text_lower, restaurante_id)
         if respuesta_dinamica:
             return respuesta_dinamica
 
-        # DELIVERY - Usando solo configuración
         if any(word in text_lower for word in ['delivery', 'domicilio', 'entregar', 'llevar', 'envio', 'envío']):
             return f"""🚗 SERVICIO DE DELIVERY
 
@@ -782,7 +787,6 @@ Escribe "menu" para ver nuestras deliciosas opciones 🍽"""
 
 Escribe "menú" para hacer tu pedido."""
 
-        # HORARIO - Usando solo configuración
         elif any(word in text_lower for word in ['horario', 'horarios', 'abierto', 'cerrado', 'hora', 'abren', 'cierran']):
             return f"""🕐 HORARIOS DE SERVICIO
 
@@ -798,7 +802,6 @@ Escribe "menú" para hacer tu pedido."""
 
 ¡Te esperamos!"""
 
-        # CONTACTO - Usando solo configuración
         elif any(word in text_lower for word in ['donde', 'dirección', 'direccion', 'ubicación', 'ubicacion', 'telefono', 'teléfono', 'contacto', 'llamar']):
             return f"""📞 INFORMACIÓN DE CONTACTO
 
@@ -815,7 +818,6 @@ Escribe "menú" para hacer tu pedido."""
 
 ¡Estamos aquí para servirte!"""
 
-        # CONFIRMAR PEDIDO
         elif 'confirmar' in text_lower and 'pedido' in text_lower:
             if len(session.cart) == 0:
                 return """🛒 Tu carrito está vacío
@@ -837,7 +839,6 @@ Escribe "menú" para ver nuestras opciones."""
                 
                 items_agregados = 0
                 for item in session.cart:
-                    # Agregar directamente usando el código que ya viene del carrito
                     success = db.agregar_item_pedido(pedido_id, item['id'], item.get('cantidad', 1), float(item['precio']))
                     if success:
                         items_agregados += 1
@@ -908,7 +909,6 @@ Escribe "menú" para hacer otro pedido."""
                 traceback.print_exc()
                 return "❌ Hubo un error al confirmar tu pedido. Por favor contacta al restaurante."
 
-        # CANCELAR PEDIDO
         elif 'cancelar' in text_lower and 'pedido' in text_lower:
             session.cart = []
             return """🗑 Pedido cancelado
@@ -918,7 +918,6 @@ Tu carrito ha sido limpiado.
 ¿Deseas empezar un nuevo pedido?
 Escribe "menú" para ver nuestras opciones."""
 
-        # ✅ VER CARRITO MEJORADO
         elif 'carrito' in text_lower or 'pedido actual' in text_lower:
             if len(session.cart) == 0:
                 return """🛒 Tu carrito está vacío
@@ -927,10 +926,8 @@ Aún no has agregado productos.
 
 Escribe "menú" para ver nuestras opciones."""
             
-            # ✅ Calcular total correctamente con cantidad
             total = sum(item['precio'] * item.get('cantidad', 1) for item in session.cart)
             
-            # ✅ Mostrar cantidad en la lista
             items_list = "\n".join([
                 f"• {item['nombre']} x{item.get('cantidad', 1)} - ${item['precio'] * item.get('cantidad', 1)}" 
                 for item in session.cart
@@ -947,7 +944,6 @@ Opciones:
 - Escribe "menú" para agregar más items
 - Escribe "cancelar pedido" para limpiar"""
 
-        # SALUDOS
         elif any(word in text_lower for word in ['hola', 'buenas', 'hi', 'hello', 'buenos días', 'buenas tardes', 'buenas noches', 'buen día']):
             saludos = [
                 f"¡Bienvenido a {RESTAURANT_CONFIG['nombre']}! ¿Listo para una experiencia culinaria única?",
@@ -956,7 +952,6 @@ Opciones:
             ]
             return random.choice(saludos) + "\n\nEscribe 'menu' para ver todas nuestras opciones."
 
-        # AGRADECIMIENTOS
         elif any(word in text_lower for word in ['gracias', 'excelente', 'perfecto', 'buenísimo', 'delicioso', 'rico']):
             return """¡Muchas gracias!
 
@@ -965,7 +960,6 @@ Nos hace muy felices poder ayudarte. Tu satisfacción es nuestra mayor recompens
 ¿Hay algo más en lo que pueda asistirte?
 Escribe "menú" para ver nuestras opciones."""
 
-        # DESPEDIDAS
         elif any(word in text_lower for word in ['adios', 'adiós', 'bye', 'hasta luego', 'nos vemos', 'chao']):
             despedidas = [
                 f"¡Adiós! Esperamos verte pronto en {RESTAURANT_CONFIG['nombre']}!",
@@ -974,7 +968,6 @@ Escribe "menú" para ver nuestras opciones."""
             ]
             return random.choice(despedidas)
 
-        # ✅ RESPUESTA POR DEFECTO MEJORADA
         else:
             return """¿Te puedo ayudar con algo específico?
 
@@ -1003,12 +996,12 @@ if __name__ == "__main__":
     print("=" * 60)
     print("🌐 Iniciando Servidor Web para Bot de Restaurante")
     print("=" * 60)
-    print("🔗 Servidor: http://localhost:5000")
+    print("🔗 Servidor: http://localhost:5000/<slug>/")
     print("🤖 Bot de Telegram conectado")
     print("🗄 Base de datos MySQL conectada")
     print(f"📱 Grupo notificaciones: {CHAT_IDS.get('cocina', CHAT_IDS.get('admin', 'No configurado'))}")
     print("✅ Listo para recibir mensajes desde la web")
-    print("🎯 MODO DINÁMICO: Todo se consulta desde la BD")
+    print("🎯 MODO MULTI-RESTAURANTE: Dinámico por slug")
     print("📅 SISTEMA DE RESERVACIONES INTEGRADO")
     print("=" * 60)
     
