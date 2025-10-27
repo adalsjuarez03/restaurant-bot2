@@ -6,6 +6,8 @@ VERSIÓN MULTI-RESTAURANTE - Dinámico por Slug
 import sys
 import os
 import unicodedata
+import json
+from datetime import datetime
 
 def normalizar_texto(texto):
     """Eliminar tildes y normalizar texto para búsquedas"""
@@ -27,7 +29,6 @@ from database.database_multirestaurante import DatabaseManager
 import threading
 import time
 import random
-from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
@@ -37,6 +38,189 @@ message_handlers = RestaurantMessageHandlers(bot)
 db = DatabaseManager()
 
 chat_sessions = {}
+
+# ==================== AGREGAR ESTAS FUNCIONES AL INICIO (después de los imports) ====================
+
+def obtener_info_horarios(restaurante_id):
+    """Obtener horarios dinámicos desde la BD"""
+    from database.database_multirestaurante import get_db_cursor
+    
+    with get_db_cursor() as (cursor, conn):
+        cursor.execute("SELECT horarios FROM restaurantes WHERE id = %s", (restaurante_id,))
+        result = cursor.fetchone()
+    
+    if not result or not result['horarios']:
+        # Fallback a config.py si no hay horarios configurados
+        return None
+    
+    try:
+        horarios = json.loads(result['horarios']) if isinstance(result['horarios'], str) else result['horarios']
+        return horarios
+    except:
+        return None
+
+
+def generar_texto_horarios(restaurante_id):
+    """Generar texto de horarios para mostrar en el chat"""
+    horarios = obtener_info_horarios(restaurante_id)
+    
+    if not horarios:
+        # Fallback al config.py
+        return f"""🕐 HORARIOS DE SERVICIO
+
+📅 Lunes a Viernes: {RESTAURANT_CONFIG['horario']['lunes_viernes']}
+📅 Sábado: {RESTAURANT_CONFIG['horario']['sabado']}
+📅 Domingo: {RESTAURANT_CONFIG['horario']['domingo']}
+
+🚗 Delivery: Mismo horario del restaurante
+⏰ Última orden: 30 minutos antes del cierre
+
+¡Te esperamos!"""
+    
+    # Construir texto desde BD
+    dias_nombres = {
+        'lunes': 'Lunes',
+        'martes': 'Martes',
+        'miercoles': 'Miércoles',
+        'jueves': 'Jueves',
+        'viernes': 'Viernes',
+        'sabado': 'Sábado',
+        'domingo': 'Domingo'
+    }
+    
+    texto = "🕐 HORARIOS DE ATENCIÓN\n\n"
+    
+    for dia_key, dia_nombre in dias_nombres.items():
+        if dia_key in horarios:
+            horario = horarios[dia_key]
+            
+            if not horario.get('activo', False):
+                texto += f"📅 {dia_nombre}: Cerrado\n"
+            elif horario.get('24h', False):
+                texto += f"📅 {dia_nombre}: Abierto 24 horas\n"
+            else:
+                apertura = horario.get('apertura', '09:00')
+                cierre = horario.get('cierre', '22:00')
+                texto += f"📅 {dia_nombre}: {apertura} - {cierre}\n"
+    
+    # Verificar si está abierto ahora
+    from datetime import datetime
+    now = datetime.now()
+    dia_actual = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'][now.weekday()]
+    
+    if dia_actual in horarios:
+        horario_hoy = horarios[dia_actual]
+        if horario_hoy.get('activo', False):
+            if horario_hoy.get('24h', False):
+                texto += f"\n🟢 Abierto ahora (24 horas)"
+            else:
+                hora_actual = now.time()
+                try:
+                    from datetime import time
+                    apertura = datetime.strptime(horario_hoy['apertura'], '%H:%M').time()
+                    cierre = datetime.strptime(horario_hoy['cierre'], '%H:%M').time()
+                    
+                    if apertura <= hora_actual <= cierre:
+                        texto += f"\n🟢 Abierto ahora (hasta las {horario_hoy['cierre']})"
+                    elif hora_actual < apertura:
+                        texto += f"\n🔴 Cerrado (Abre a las {horario_hoy['apertura']})"
+                    else:
+                        texto += f"\n🔴 Cerrado (Cierra a las {horario_hoy['cierre']})"
+                except:
+                    pass
+        else:
+            texto += f"\n🔴 Cerrado hoy"
+    
+    texto += "\n\n¡Te esperamos!"
+    return texto
+
+
+def obtener_info_delivery(restaurante_id):
+    """Obtener configuración de delivery desde la BD"""
+    from database.database_multirestaurante import get_db_cursor
+    
+    with get_db_cursor() as (cursor, conn):
+        cursor.execute("SELECT config_delivery FROM restaurantes WHERE id = %s", (restaurante_id,))
+        result = cursor.fetchone()
+    
+    if not result or not result['config_delivery']:
+        return None
+    
+    try:
+        config = json.loads(result['config_delivery']) if isinstance(result['config_delivery'], str) else result['config_delivery']
+        return config
+    except:
+        return None
+
+
+def generar_texto_delivery(restaurante_id):
+    """Generar texto de delivery para mostrar en el chat"""
+    config = obtener_info_delivery(restaurante_id)
+    
+    if not config:
+        # Fallback al config.py
+        return f"""🚗 SERVICIO DE DELIVERY
+
+📍 Cobertura: {RESTAURANT_CONFIG['delivery']['zona_cobertura']}
+⏱ Tiempo: {RESTAURANT_CONFIG['delivery']['tiempo_estimado']}
+💰 Costo de envío: ${RESTAURANT_CONFIG['delivery']['costo_envio']}
+🛒 Pedido mínimo: ${RESTAURANT_CONFIG['delivery']['pedido_minimo']}
+
+📞 Contacto: {RESTAURANT_CONFIG['contacto']['telefono']}
+
+Escribe "menú" para hacer tu pedido."""
+    
+    # Construir texto desde BD
+    texto = "🚗 INFORMACIÓN DE DELIVERY\n\n"
+    
+    if not config.get('activo', True):
+        texto += "🚫 Delivery no disponible en este momento.\n"
+        texto += "Puedes hacer tu pedido para recoger en el local.\n\n"
+        texto += "Escribe 'menú' para ver nuestras opciones."
+        return texto
+    
+    texto += f"💰 Costo de envío: ${config.get('costo_envio_base', 35):.2f}\n"
+    texto += f"🛒 Pedido mínimo: ${config.get('pedido_minimo', 150):.2f}\n"
+    
+    if config.get('envio_gratis_desde', 0) > 0:
+        texto += f"🎁 Envío GRATIS desde: ${config['envio_gratis_desde']:.2f}\n"
+    
+    texto += f"⏱ Tiempo estimado: {config.get('tiempo_entrega', '30-45 minutos')}\n"
+    
+    # Zonas de cobertura
+    zonas = config.get('zonas_cobertura', [])
+    if zonas:
+        texto += f"\n📍 Zonas de cobertura:\n"
+        for zona in zonas:
+            if zona.strip():  # Evitar líneas vacías
+                texto += f"   • {zona}\n"
+    
+    texto += "\nEscribe 'menú' para hacer tu pedido."
+    return texto
+
+
+def calcular_costo_envio_dinamico(restaurante_id, subtotal):
+    """Calcular costo de envío según configuración de la BD"""
+    config = obtener_info_delivery(restaurante_id)
+    
+    if not config:
+        # Fallback
+        return RESTAURANT_CONFIG['delivery']['costo_envio'], RESTAURANT_CONFIG['delivery']['pedido_minimo']
+    
+    if not config.get('activo', True):
+        return 0, 0
+    
+    pedido_minimo = config.get('pedido_minimo', 150)
+    
+    # Verificar envío gratis
+    envio_gratis_desde = config.get('envio_gratis_desde', 0)
+    if envio_gratis_desde > 0 and subtotal >= envio_gratis_desde:
+        return 0, pedido_minimo
+    
+    # Costo normal
+    costo_envio = config.get('costo_envio_base', 35)
+    return costo_envio, pedido_minimo
+
 
 class WebChatSession:
     """Simular una sesión de chat para usuarios web"""
@@ -413,6 +597,7 @@ Escribe 'reservar' para hacer otra reservación"""
                 return "❌ Reservación cancelada.\n\nEscribe 'reservar' para intentar de nuevo."
     
     return None
+
 @app.route('/')
 def home():
     """Redirigir al primer restaurante o mostrar mensaje"""
@@ -666,8 +851,10 @@ def generar_respuesta_dinamica(session, text_lower, restaurante_id):
                     respuesta += f" - ${precio_max}"
                 respuesta += "\n"
         
-        respuesta += f"\n🚗 Delivery: ${RESTAURANT_CONFIG['delivery']['costo_envio']}"
-        respuesta += f" (pedido mínimo ${RESTAURANT_CONFIG['delivery']['pedido_minimo']})\n\n"
+        # Usar función dinámica para obtener costo de envío
+        costo_envio, pedido_minimo = calcular_costo_envio_dinamico(restaurante_id, 0)
+        respuesta += f"\n🚗 Delivery: ${costo_envio}"
+        respuesta += f" (pedido mínimo ${pedido_minimo})\n\n"
         respuesta += "Escribe 'menú' para ver el menú completo con todos los detalles."
         
         return respuesta
@@ -775,32 +962,13 @@ Escribe "menu" para ver nuestras deliciosas opciones 🍽"""
         if respuesta_dinamica:
             return respuesta_dinamica
 
-        if any(word in text_lower for word in ['delivery', 'domicilio', 'entregar', 'llevar', 'envio', 'envío']):
-            return f"""🚗 SERVICIO DE DELIVERY
+        # ==================== REEMPLAZAR ESTAS SECCIONES EN process_bot_message() ====================
 
-📍 Cobertura: {RESTAURANT_CONFIG['delivery']['zona_cobertura']}
-⏱ Tiempo: {RESTAURANT_CONFIG['delivery']['tiempo_estimado']}
-💰 Costo de envío: ${RESTAURANT_CONFIG['delivery']['costo_envio']}
-🛒 Pedido mínimo: ${RESTAURANT_CONFIG['delivery']['pedido_minimo']}
-
-📞 Contacto: {RESTAURANT_CONFIG['contacto']['telefono']}
-
-Escribe "menú" para hacer tu pedido."""
+        elif any(word in text_lower for word in ['delivery', 'domicilio', 'entregar', 'llevar', 'envio', 'envío']):
+            return generar_texto_delivery(restaurante_id)
 
         elif any(word in text_lower for word in ['horario', 'horarios', 'abierto', 'cerrado', 'hora', 'abren', 'cierran']):
-            return f"""🕐 HORARIOS DE SERVICIO
-
-📅 Lunes a Viernes: {RESTAURANT_CONFIG['horario']['lunes_viernes']}
-📅 Sábado: {RESTAURANT_CONFIG['horario']['sabado']}
-📅 Domingo: {RESTAURANT_CONFIG['horario']['domingo']}
-
-🚗 Delivery: Mismo horario del restaurante
-⏰ Última orden: 30 minutos antes del cierre
-
-🪑 Reservaciones disponibles:
-{', '.join(RESTAURANT_CONFIG['horarios_reservacion'])}
-
-¡Te esperamos!"""
+            return generar_texto_horarios(restaurante_id)
 
         elif any(word in text_lower for word in ['donde', 'dirección', 'direccion', 'ubicación', 'ubicacion', 'telefono', 'teléfono', 'contacto', 'llamar']):
             return f"""📞 INFORMACIÓN DE CONTACTO
@@ -827,6 +995,28 @@ Aún no has agregado ningún platillo a tu pedido.
 Escribe "menú" para ver nuestras opciones."""
             
             try:
+                # ==================== ACTUALIZAR CÁLCULO DE TOTAL EN CONFIRMAR PEDIDO ====================
+                
+                # Calcular subtotal
+                subtotal = sum(item['precio'] * item.get('cantidad', 1) for item in session.cart)
+                
+                # Calcular costo de envío dinámicamente
+                costo_envio, pedido_minimo = calcular_costo_envio_dinamico(restaurante_id, subtotal)
+                
+                # Validar pedido mínimo
+                if subtotal < pedido_minimo:
+                    faltante = pedido_minimo - subtotal
+                    return f"""❌ PEDIDO MÍNIMO NO ALCANZADO
+
+💰 Subtotal: ${subtotal:.2f}
+🛒 Pedido mínimo: ${pedido_minimo:.2f}
+❗ Te faltan: ${faltante:.2f}
+
+Escribe 'menú' para agregar más items."""
+                
+                # Calcular total con envío
+                total = subtotal + costo_envio
+                
                 resultado_pedido = db.crear_pedido_simple(restaurante_id, session.cliente_id, 'delivery', 'web')
                 if not resultado_pedido or 'pedido_id' not in resultado_pedido:
                     return "❌ Error al crear el pedido. Por favor intenta de nuevo."
@@ -849,6 +1039,16 @@ Escribe "menú" para ver nuestras opciones."""
                 if items_agregados == 0:
                     return "❌ No se pudieron agregar los items al pedido. Por favor intenta de nuevo."
                 
+                # Actualizar total del pedido con envío
+                from database.database_multirestaurante import get_db_cursor
+                with get_db_cursor() as (cursor, conn):
+                    cursor.execute("""
+                        UPDATE pedidos 
+                        SET total = %s, costo_envio = %s
+                        WHERE id = %s
+                    """, (total, costo_envio, pedido_id))
+                    conn.commit()
+                
                 db.actualizar_estado_pedido(pedido_id, 'confirmado')
                 
                 pedido_final = db.get_pedido(pedido_id)
@@ -856,17 +1056,25 @@ Escribe "menú" para ver nuestras opciones."""
                 
                 if not pedido_final or not detalles:
                     print("⚠ No se pudieron obtener los detalles finales del pedido")
-                    total = sum(item['precio'] * item.get('cantidad', 1) for item in session.cart)
                     order_summary = "\n".join([
                         f"• {item['nombre']} x{item.get('cantidad', 1)} - ${item['precio'] * item.get('cantidad', 1)}" 
                         for item in session.cart
                     ])
                 else:
-                    total = float(pedido_final['total'])
                     order_summary = "\n".join([
                         f"• {d['item_nombre']} x{d['cantidad']} - ${d['subtotal']}" 
                         for d in detalles
                     ])
+                
+                # Mensaje de costo con desglose
+                mensaje_costo = f"""💵 DESGLOSE:
+🍽️ Subtotal: ${subtotal:.2f}
+🚗 Envío: ${costo_envio:.2f}"""
+                
+                if costo_envio == 0 and subtotal >= obtener_info_delivery(restaurante_id).get('envio_gratis_desde', 999999):
+                    mensaje_costo += " ¡GRATIS! 🎉"
+                
+                mensaje_costo += f"\n💰 TOTAL: ${total:.2f}"
                 
                 send_notification_to_group("new_order", {
                     "items": detalles if detalles else session.cart,
@@ -887,7 +1095,7 @@ Escribe "menú" para ver nuestras opciones."""
 📋 Tu pedido:
 {order_summary}
 
-💵 Total: ${total:.2f}
+{mensaje_costo}
 
 📞 Próximos pasos:
 1️⃣ Te contactaremos al: {session.customer_phone}
@@ -1003,6 +1211,7 @@ if __name__ == "__main__":
     print("✅ Listo para recibir mensajes desde la web")
     print("🎯 MODO MULTI-RESTAURANTE: Dinámico por slug")
     print("📅 SISTEMA DE RESERVACIONES INTEGRADO")
+    print("🕐 HORARIOS Y DELIVERY DINÁMICOS DESDE BD")
     print("=" * 60)
     
     run_flask_server()
