@@ -23,7 +23,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import telebot
-from config import BOT_TOKEN, CHAT_IDS, RESTAURANT_CONFIG
+# ✅ NO importar bot global - usaremos bots dinámicos por restaurante
+# Solo importar RESTAURANT_CONFIG como fallback para info básica
+from config import RESTAURANT_CONFIG
 from bot.restaurant_message_handlers import RestaurantMessageHandlers
 from database.database_multirestaurante import DatabaseManager
 import threading
@@ -33,8 +35,7 @@ import random
 app = Flask(__name__)
 CORS(app)
 
-bot = telebot.TeleBot(BOT_TOKEN)
-message_handlers = RestaurantMessageHandlers(bot)
+# ✅ NO crear bot global aquí - se creará dinámicamente por restaurante
 db = DatabaseManager()
 
 chat_sessions = {}
@@ -222,6 +223,154 @@ def calcular_costo_envio_dinamico(restaurante_id, subtotal):
     return costo_envio, pedido_minimo
 
 
+def obtener_info_contacto(restaurante_id):
+    """Obtener información de contacto desde la BD"""
+    from database.database_multirestaurante import get_db_cursor
+    
+    with get_db_cursor() as (cursor, conn):
+        cursor.execute("""
+            SELECT nombre_restaurante, telefono, email, direccion, ciudad, estado_republica
+            FROM restaurantes WHERE id = %s
+        """, (restaurante_id,))
+        return cursor.fetchone()
+
+
+# ==================== REEMPLAZAR LA FUNCIÓN send_notification_to_group() ====================
+
+def send_notification_to_group(notification_type, data, session):
+    """Enviar notificación al grupo de Telegram - DINÁMICO POR RESTAURANTE"""
+    try:
+        # ✅ Obtener configuración de Telegram del restaurante
+        from database.database_multirestaurante import get_db_cursor
+        
+        with get_db_cursor() as (cursor, conn):
+            cursor.execute("""
+                SELECT bot_token, telegram_admin_id, telegram_group_id, config_notificaciones
+                FROM restaurantes 
+                WHERE id = %s
+            """, (session.restaurante_id,))
+            config = cursor.fetchone()
+        
+        if not config:
+            print(f"⚠️ No hay configuración de Telegram para restaurante {session.restaurante_id}")
+            return
+        
+        # ✅ Verificar si hay bot_token
+        if not config.get('bot_token'):
+            print(f"⚠️ No hay bot_token configurado para restaurante {session.restaurante_id}")
+            return
+        
+        # ✅ Parsear config_notificaciones si existe
+        config_notif = {'notificar_pedidos': True, 'notificar_reservaciones': True}
+        
+        if config.get('config_notificaciones'):
+            try:
+                if isinstance(config['config_notificaciones'], str):
+                    config_notif = json.loads(config['config_notificaciones'])
+                else:
+                    config_notif = config['config_notificaciones']
+                print(f"📋 Config notificaciones cargada: {config_notif}")
+            except Exception as e:
+                print(f"⚠️ Error parseando config_notificaciones: {e}")
+        
+        # ✅ Verificar si el tipo de notificación está activo
+        if notification_type == "new_order" and not config_notif.get('notificar_pedidos', True):
+            print(f"ℹ️ Notificaciones de pedidos desactivadas para restaurante {session.restaurante_id}")
+            return
+        
+        if notification_type == "new_reservation" and not config_notif.get('notificar_reservaciones', True):
+            print(f"ℹ️ Notificaciones de reservaciones desactivadas para restaurante {session.restaurante_id}")
+            return
+        
+        # ✅ Determinar chat destino (prioridad: grupo > admin)
+        target_chat = config.get('telegram_group_id') or config.get('telegram_admin_id')
+        
+        if not target_chat:
+            print(f"⚠️ No hay chat configurado para restaurante {session.restaurante_id}")
+            return
+        
+        print(f"📤 Enviando notificación tipo '{notification_type}' a chat {target_chat}")
+        
+        # ✅ Crear bot dinámico con el token del restaurante
+        import telebot
+        bot_restaurante = telebot.TeleBot(config['bot_token'])
+        
+        # ✅ Construir mensaje según tipo
+        message = ""
+        
+        if notification_type == "new_order":
+            if data['items'] and isinstance(data['items'][0], dict) and 'item_nombre' in data['items'][0]:
+                items_text = "\n".join([
+                    f"• {item['item_nombre']} x{item['cantidad']} - ${item['subtotal']}"
+                    for item in data['items']
+                ])
+            else:
+                items_text = "\n".join([
+                    f"• {item['nombre']} x{item.get('cantidad', 1)} - ${item['precio']}"
+                    for item in data['items']
+                ])
+            
+            message = f"""🆕 NUEVO PEDIDO WEB
+
+👤 Cliente: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+📧 Email: {session.customer_email or 'No proporcionado'}
+📍 Dirección: {session.customer_address}
+🌐 Origen: Interfaz Web
+🆔 Session: {session.session_id[:8]}
+📋 Pedido: #{data.get('order_number', 'N/A')}
+
+🍽 PEDIDO:
+{items_text}
+
+💰 Total: ${data['total']}
+⏰ Hora: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+🏪 Estado: Confirmado
+
+✅ Pedido guardado en base de datos"""
+            
+        elif notification_type == "new_reservation":
+            reservacion = data['reservacion']
+            
+            message = f"""🎯 NUEVA RESERVACIÓN WEB
+
+👤 Cliente: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+🆔 Código: {reservacion['codigo_reservacion']}
+
+📅 Fecha: {data['fecha']}
+⏰ Hora: {data['hora']}
+👥 Personas: {data['personas']}"""
+            
+            if data.get('ocasion'):
+                message += f"\n🎉 Ocasión: {data['ocasion']}"
+            
+            if data.get('notas'):
+                message += f"\n📝 Notas: {data['notas']}"
+            
+            message += f"""
+
+🌐 Origen: Interfaz Web
+⏰ Registrado: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+✅ Estado: Pendiente de confirmación"""
+            
+        elif notification_type == "new_message":
+            message = f"""💬 MENSAJE DEL CHAT WEB
+
+👤 Usuario: {session.customer_name or 'Sin registrar'}
+💬 Mensaje: {data['message']}
+⏰ {datetime.now().strftime('%H:%M')}"""
+        
+        # ✅ Enviar mensaje con el bot del restaurante
+        bot_restaurante.send_message(target_chat, message)
+        print(f"✅ Notificación '{notification_type}' enviada exitosamente a {target_chat}")
+        
+    except Exception as e:
+        print(f"❌ Error enviando notificación de Telegram: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 class WebChatSession:
     """Simular una sesión de chat para usuarios web"""
     def __init__(self, session_id, restaurante_id):
@@ -277,92 +426,6 @@ class MockUser:
         self.first_name = "Cliente"
         self.last_name = "Web"
         self.username = "web_user"
-
-def send_notification_to_group(notification_type, data, session):
-    """Enviar notificación al grupo de Telegram"""
-    try:
-        target_chat = CHAT_IDS.get("cocina") or CHAT_IDS.get("grupo_restaurante") or CHAT_IDS.get("admin")
-        
-        if not target_chat:
-            print("⚠ No hay grupo configurado para notificaciones")
-            return
-        
-        if notification_type == "new_order":
-            if data['items'] and isinstance(data['items'][0], dict) and 'item_nombre' in data['items'][0]:
-                items_text = "\n".join([
-                    f"• {item['item_nombre']} x{item['cantidad']} - ${item['subtotal']}"
-                    for item in data['items']
-                ])
-            else:
-                items_text = "\n".join([
-                    f"• {item['nombre']} x{item.get('cantidad', 1)} - ${item['precio']}"
-                    for item in data['items']
-                ])
-            
-            message = f"""🆕 NUEVO PEDIDO WEB
-
-👤 Cliente: {session.customer_name}
-📱 Teléfono: {session.customer_phone}
-📧 Email: {session.customer_email or 'No proporcionado'}
-📍 Dirección: {session.customer_address}
-🌐 Origen: Interfaz Web
-🆔 Session: {session.session_id[:8]}
-📋 Pedido: #{data.get('order_number', 'N/A')}
-
-🍽 PEDIDO:
-{items_text}
-
-💰 Total: ${data['total']}
-⏰ Hora: {datetime.now().strftime('%d/%m/%Y %H:%M')}
-🏪 Estado: Confirmado
-
-✅ Pedido guardado en base de datos"""
-            
-            bot.send_message(target_chat, message)
-            print(f"✅ Pedido notificado al grupo: {target_chat}")
-            
-        elif notification_type == "new_reservation":
-            reservacion = data['reservacion']
-            
-            message = f"""🎯 NUEVA RESERVACIÓN WEB
-
-👤 Cliente: {session.customer_name}
-📱 Teléfono: {session.customer_phone}
-🆔 Código: {reservacion['codigo_reservacion']}
-
-📅 Fecha: {data['fecha']}
-⏰ Hora: {data['hora']}
-👥 Personas: {data['personas']}"""
-            
-            if data.get('ocasion'):
-                message += f"\n🎉 Ocasión: {data['ocasion']}"
-            
-            if data.get('notas'):
-                message += f"\n📝 Notas: {data['notas']}"
-            
-            message += f"""
-
-🌐 Origen: Interfaz Web
-⏰ Registrado: {datetime.now().strftime('%d/%m/%Y %H:%M')}
-✅ Estado: Pendiente de confirmación"""
-            
-            bot.send_message(target_chat, message)
-            print(f"✅ Reservación notificada al grupo: {target_chat}")
-            
-        elif notification_type == "new_message":
-            message = f"""💬 MENSAJE DEL CHAT WEB
-
-👤 Usuario: {session.customer_name or 'Sin registrar'}
-💬 Mensaje: {data['message']}
-⏰ {datetime.now().strftime('%H:%M')}"""
-            
-            bot.send_message(target_chat, message)
-            print(f"✅ Mensaje notificado al grupo: {target_chat}")
-            
-    except Exception as e:
-        print(f"❌ Error enviando notificación: {e}")
-        import traceback
-        traceback.print_exc()
 
 def process_reservacion_flow(session, text_lower, text):
     """Procesar el flujo de reservaciones"""
@@ -962,7 +1025,7 @@ Escribe "menu" para ver nuestras deliciosas opciones 🍽"""
         if respuesta_dinamica:
             return respuesta_dinamica
 
-        # ==================== REEMPLAZAR ESTAS SECCIONES EN process_bot_message() ====================
+        # ==================== ACTUALIZAR ESTAS SECCIONES EN process_bot_message() ====================
 
         elif any(word in text_lower for word in ['delivery', 'domicilio', 'entregar', 'llevar', 'envio', 'envío']):
             return generar_texto_delivery(restaurante_id)
@@ -971,7 +1034,23 @@ Escribe "menu" para ver nuestras deliciosas opciones 🍽"""
             return generar_texto_horarios(restaurante_id)
 
         elif any(word in text_lower for word in ['donde', 'dirección', 'direccion', 'ubicación', 'ubicacion', 'telefono', 'teléfono', 'contacto', 'llamar']):
-            return f"""📞 INFORMACIÓN DE CONTACTO
+            info = obtener_info_contacto(restaurante_id)
+            
+            if info:
+                return f"""📞 INFORMACIÓN DE CONTACTO
+
+🏨 {info['nombre_restaurante']}
+
+📍 Dirección:
+{info['direccion']}, {info['ciudad']}, {info['estado_republica']}
+
+📱 Teléfono: {info['telefono']}
+📧 Email: {info['email']}
+
+¡Estamos aquí para servirte!"""
+            else:
+                # Fallback a config.py
+                return f"""📞 INFORMACIÓN DE CONTACTO
 
 🏨 {RESTAURANT_CONFIG['nombre']}
 
@@ -1071,7 +1150,8 @@ Escribe 'menú' para agregar más items."""
 🍽️ Subtotal: ${subtotal:.2f}
 🚗 Envío: ${costo_envio:.2f}"""
                 
-                if costo_envio == 0 and subtotal >= obtener_info_delivery(restaurante_id).get('envio_gratis_desde', 999999):
+                delivery_config = obtener_info_delivery(restaurante_id)
+                if costo_envio == 0 and delivery_config and subtotal >= delivery_config.get('envio_gratis_desde', 999999):
                     mensaje_costo += " ¡GRATIS! 🎉"
                 
                 mensaje_costo += f"\n💰 TOTAL: ${total:.2f}"
@@ -1153,8 +1233,11 @@ Opciones:
 - Escribe "cancelar pedido" para limpiar"""
 
         elif any(word in text_lower for word in ['hola', 'buenas', 'hi', 'hello', 'buenos días', 'buenas tardes', 'buenas noches', 'buen día']):
+            restaurante_info = obtener_info_contacto(restaurante_id)
+            nombre_rest = restaurante_info['nombre_restaurante'] if restaurante_info else RESTAURANT_CONFIG['nombre']
+            
             saludos = [
-                f"¡Bienvenido a {RESTAURANT_CONFIG['nombre']}! ¿Listo para una experiencia culinaria única?",
+                f"¡Bienvenido a {nombre_rest}! ¿Listo para una experiencia culinaria única?",
                 f"¡Buen día! Me da mucho gusto saludarte. ¿Qué se te antoja hoy?",
                 "¡Has llegado al lugar correcto para disfrutar de deliciosa comida!"
             ]
@@ -1169,8 +1252,11 @@ Nos hace muy felices poder ayudarte. Tu satisfacción es nuestra mayor recompens
 Escribe "menú" para ver nuestras opciones."""
 
         elif any(word in text_lower for word in ['adios', 'adiós', 'bye', 'hasta luego', 'nos vemos', 'chao']):
+            restaurante_info = obtener_info_contacto(restaurante_id)
+            nombre_rest = restaurante_info['nombre_restaurante'] if restaurante_info else RESTAURANT_CONFIG['nombre']
+            
             despedidas = [
-                f"¡Adiós! Esperamos verte pronto en {RESTAURANT_CONFIG['nombre']}!",
+                f"¡Adiós! Esperamos verte pronto en {nombre_rest}!",
                 "¡Hasta pronto! Que tengas un día delicioso",
                 "¡Chao! Gracias por visitarnos. Te esperamos con los brazos abiertos!"
             ]
@@ -1207,11 +1293,11 @@ if __name__ == "__main__":
     print("🔗 Servidor: http://localhost:5000/<slug>/")
     print("🤖 Bot de Telegram conectado")
     print("🗄 Base de datos MySQL conectada")
-    print(f"📱 Grupo notificaciones: {CHAT_IDS.get('cocina', CHAT_IDS.get('admin', 'No configurado'))}")
     print("✅ Listo para recibir mensajes desde la web")
     print("🎯 MODO MULTI-RESTAURANTE: Dinámico por slug")
     print("📅 SISTEMA DE RESERVACIONES INTEGRADO")
     print("🕐 HORARIOS Y DELIVERY DINÁMICOS DESDE BD")
+    print("🤖 NOTIFICACIONES TELEGRAM DINÁMICAS POR RESTAURANTE")
     print("=" * 60)
     
     run_flask_server()

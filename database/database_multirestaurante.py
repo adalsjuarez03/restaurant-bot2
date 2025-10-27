@@ -85,10 +85,32 @@ class DatabaseManager:
         try:
             with get_db_cursor() as (cursor, conn):
                 cursor.execute("""
-                    SELECT * FROM restaurantes 
+                    SELECT 
+                        id, slug, nombre_restaurante, descripcion, telefono, email,
+                        direccion, ciudad, estado_republica, codigo_postal,
+                        logo_url, banner_url, config_delivery, horarios,
+                        bot_token, telegram_admin_id, telegram_group_id, config_notificaciones,
+                        plan, limite_productos, estado, fecha_expiracion, created_at
+                    FROM restaurantes 
                     WHERE slug = %s AND estado = 'activo'
                 """, (slug,))
-                return cursor.fetchone()
+                restaurante = cursor.fetchone()
+                
+                if not restaurante:
+                    return None
+                
+                # ✅ Parsear JSONs
+                import json
+                if restaurante.get('config_delivery') and isinstance(restaurante['config_delivery'], str):
+                    restaurante['config_delivery'] = json.loads(restaurante['config_delivery'])
+                
+                if restaurante.get('horarios') and isinstance(restaurante['horarios'], str):
+                    restaurante['horarios'] = json.loads(restaurante['horarios'])
+                
+                if restaurante.get('config_notificaciones') and isinstance(restaurante['config_notificaciones'], str):
+                    restaurante['config_notificaciones'] = json.loads(restaurante['config_notificaciones'])
+                
+                return restaurante
         except Error as e:
             print(f"❌ Error obteniendo restaurante: {e}")
             return None
@@ -137,11 +159,13 @@ class DatabaseManager:
                 updates = []
                 params = []
                 
+                # ✅ AGREGAR LOS CAMPOS DE TELEGRAM AQUÍ
                 campos_permitidos = [
                     'nombre_restaurante', 'descripcion', 'telefono', 'email',
-                    'direccion', 'ciudad', 'estado_republica', 'logo_url',
-                    'banner_url', 'color_primario', 'color_secundario',
-                    'horarios', 'config_delivery', 'bot_token'
+                    'direccion', 'ciudad', 'estado_republica', 'codigo_postal',
+                    'logo_url', 'banner_url', 'color_primario', 'color_secundario',
+                    'horarios', 'config_delivery', 
+                    'bot_token', 'telegram_admin_id', 'telegram_group_id', 'config_notificaciones'  # ✅ ESTOS FALTABAN
                 ]
                 
                 for campo in campos_permitidos:
@@ -155,11 +179,20 @@ class DatabaseManager:
                 params.append(restaurante_id)
                 query = f"UPDATE restaurantes SET {', '.join(updates)} WHERE id = %s"
                 
+                print(f"🔄 Ejecutando UPDATE: {query}")  # Debug
+                print(f"🔄 Parámetros: {params}")  # Debug
+                
                 cursor.execute(query, params)
                 conn.commit()
+                
+                affected = cursor.rowcount
+                print(f"✅ Filas actualizadas: {affected}")
+                
                 return True
         except Error as e:
             print(f"❌ Error actualizando restaurante: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     # ==================== USUARIOS ADMIN ====================

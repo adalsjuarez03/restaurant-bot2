@@ -731,8 +731,59 @@ def configuracion():
                          user=user,
                          restaurante=restaurante)
 
+# ==================== AGREGAR ESTA RUTA EN admin_server.py ====================
+
+@app.route('/api/restaurante/config')
+@login_required
+def get_restaurante_config():
+    """API: Obtener configuración completa del restaurante"""
+    try:
+        user = get_current_user()
+        restaurante_id = user['restaurante_id']
+        
+        from database.database_multirestaurante import get_db_cursor
+        import json
+        
+        with get_db_cursor() as (cursor, conn):
+            cursor.execute("""
+                SELECT 
+                    slug, nombre_restaurante, descripcion, telefono, email, direccion,
+                    ciudad, estado_republica, codigo_postal, logo_url, banner_url,
+                    config_delivery, horarios, bot_token, telegram_admin_id, 
+                    telegram_group_id, config_notificaciones, plan, estado
+                FROM restaurantes 
+                WHERE id = %s
+            """, (restaurante_id,))
+            restaurante = cursor.fetchone()
+        
+        if not restaurante:
+            return jsonify({'success': False, 'message': 'Restaurante no encontrado'}), 404
+        
+        # Parsear JSONs
+        if restaurante.get('config_delivery') and isinstance(restaurante['config_delivery'], str):
+            restaurante['config_delivery'] = json.loads(restaurante['config_delivery'])
+        
+        if restaurante.get('horarios') and isinstance(restaurante['horarios'], str):
+            restaurante['horarios'] = json.loads(restaurante['horarios'])
+        
+        # ✅ Parsear config_notificaciones
+        if restaurante.get('config_notificaciones') and isinstance(restaurante['config_notificaciones'], str):
+            restaurante['config_notificaciones'] = json.loads(restaurante['config_notificaciones'])
+        
+        print(f"📤 Enviando configuración: bot_token={bool(restaurante.get('bot_token'))}, admin_id={restaurante.get('telegram_admin_id')}, group_id={restaurante.get('telegram_group_id')}")
+        
+        return jsonify({
+            'success': True,
+            'restaurante': restaurante
+        })
+        
+    except Exception as e:
+        print(f"❌ Error obteniendo config: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'message': str(e)}), 500
+    
 # ==================== RUTAS DE CONFIGURACIÓN ====================
-# Agregar estas rutas en admin_server.py después de la ruta @app.route('/configuracion')
 
 @app.route('/configuracion/general', methods=['PUT'])
 @login_required
@@ -861,39 +912,53 @@ def actualizar_configuracion_telegram():
         restaurante_id = user['restaurante_id']
         data = request.get_json()
         
+        print(f"📥 Datos recibidos: {data}")  # Debug
+        
         # Construir datos de telegram
         datos_telegram = {}
         
+        # Bot Token
         if data.get('bot_token'):
             datos_telegram['bot_token'] = data['bot_token'].strip()
         
+        # Admin ID (convertir a número)
         if data.get('telegram_admin_id'):
-            datos_telegram['telegram_admin_id'] = data['telegram_admin_id'].strip()
+            try:
+                datos_telegram['telegram_admin_id'] = int(data['telegram_admin_id'].strip())
+            except ValueError:
+                return jsonify({'success': False, 'message': 'Admin ID debe ser un número'}), 400
         
+        # Group ID (convertir a número)
         if data.get('telegram_group_id'):
-            datos_telegram['telegram_group_id'] = data['telegram_group_id'].strip()
+            try:
+                datos_telegram['telegram_group_id'] = int(data['telegram_group_id'].strip())
+            except ValueError:
+                return jsonify({'success': False, 'message': 'Group ID debe ser un número'}), 400
         
-        # Guardar configuración de notificaciones
+        # Guardar configuración de notificaciones como JSON
         config_notificaciones = {
-            'notificar_pedidos': data.get('notificar_pedidos') == 'on',
-            'notificar_reservaciones': data.get('notificar_reservaciones') == 'on'
+            'notificar_pedidos': data.get('notificar_pedidos') == True or data.get('notificar_pedidos') == 'on',
+            'notificar_reservaciones': data.get('notificar_reservaciones') == True or data.get('notificar_reservaciones') == 'on'
         }
         datos_telegram['config_notificaciones'] = json.dumps(config_notificaciones)
+        
+        print(f"💾 Guardando: {datos_telegram}")  # Debug
         
         # Actualizar en la BD
         success = db.actualizar_restaurante(restaurante_id, datos_telegram)
         
         if success:
+            print(f"✅ Configuración guardada correctamente")
             return jsonify({'success': True, 'message': 'Configuración de Telegram actualizada'})
         else:
-            return jsonify({'success': False, 'message': 'Error al actualizar'}), 500
+            print(f"❌ Error al guardar en BD")
+            return jsonify({'success': False, 'message': 'Error al actualizar en base de datos'}), 500
             
     except Exception as e:
         print(f"❌ Error actualizando Telegram: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
-
 
 @app.route('/telegram/test')
 @login_required

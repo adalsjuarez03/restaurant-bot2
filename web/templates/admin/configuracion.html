@@ -627,7 +627,17 @@ document.getElementById('formHorarios').addEventListener('submit', function(e) {
 document.getElementById('formTelegram').addEventListener('submit', function(e) {
     e.preventDefault();
     const formData = new FormData(this);
-    const data = Object.fromEntries(formData);
+    
+    // Convertir a objeto
+    const data = {
+        bot_token: formData.get('bot_token') || null,
+        telegram_admin_id: formData.get('telegram_admin_id') || null,
+        telegram_group_id: formData.get('telegram_group_id') || null,
+        notificar_pedidos: document.getElementById('notificar_pedidos').checked,
+        notificar_reservaciones: document.getElementById('notificar_reservaciones').checked
+    };
+    
+    console.log('📤 Enviando datos:', data);
     
     fetch('/configuracion/telegram', {
         method: 'PUT',
@@ -636,8 +646,9 @@ document.getElementById('formTelegram').addEventListener('submit', function(e) {
     })
     .then(response => response.json())
     .then(data => {
+        console.log('📥 Respuesta:', data);
         if (data.success) {
-            alert('✅ Configuración de Telegram guardada');
+            alert('✅ Configuración de Telegram guardada correctamente');
         } else {
             alert('❌ Error: ' + data.message);
         }
@@ -709,7 +720,7 @@ function guardarUsuario() {
 
 function eliminarUsuario(id) {
     if (confirm('⚠️ ¿Estás seguro de eliminar este usuario?')) {
-        fetch(`/usuarios/${id}`, {
+        fetch('/usuarios/' + id, {
             method: 'DELETE'
         })
         .then(response => response.json())
@@ -726,6 +737,159 @@ function eliminarUsuario(id) {
             alert('❌ Error de conexión');
         });
     }
+}
+
+// ==================== FUNCIONES DE CARGA DINÁMICA ====================
+
+// ✅ Cargar configuración de delivery al abrir la pestaña
+document.getElementById('delivery-tab').addEventListener('click', function() {
+    cargarConfiguracionDelivery();
+});
+
+function cargarConfiguracionDelivery() {
+    fetch('/api/restaurante/config')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.restaurante && data.restaurante.config_delivery) {
+            const config = data.restaurante.config_delivery;
+            
+            // Llenar formulario
+            document.querySelector('[name="delivery_activo"]').value = config.activo ? 'true' : 'false';
+            document.querySelector('[name="costo_envio_base"]').value = config.costo_envio_base || 35;
+            document.querySelector('[name="pedido_minimo"]').value = config.pedido_minimo || 150;
+            document.querySelector('[name="envio_gratis_desde"]').value = config.envio_gratis_desde || 300;
+            document.querySelector('[name="radio_cobertura"]').value = config.radio_cobertura || 5;
+            document.querySelector('[name="tiempo_entrega"]').value = config.tiempo_entrega || '30-45 minutos';
+            
+            // Zonas de cobertura (array a texto)
+            if (config.zonas_cobertura && Array.isArray(config.zonas_cobertura)) {
+                document.querySelector('[name="zonas_cobertura"]').value = config.zonas_cobertura.join('\n');
+            }
+        }
+    })
+    .catch(error => console.error('Error cargando delivery:', error));
+}
+
+// ✅ Cargar horarios al abrir la pestaña
+document.getElementById('horarios-tab').addEventListener('click', function() {
+    cargarHorarios();
+});
+
+function cargarHorarios() {
+    fetch('/api/restaurante/config')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.restaurante && data.restaurante.horarios) {
+            const horarios = data.restaurante.horarios;
+            
+            const dias = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+            
+            dias.forEach(dia => {
+                if (horarios[dia]) {
+                    const horario = horarios[dia];
+                    
+                    // Checkbox de día activo
+                    const checkboxActivo = document.getElementById('activo_' + dia);
+                    if (checkboxActivo) {
+                        checkboxActivo.checked = horario.activo || false;
+                    }
+                    
+                    // Checkbox de 24 horas
+                    const checkbox24h = document.getElementById('24h_' + dia);
+                    if (checkbox24h) {
+                        checkbox24h.checked = horario['24h'] || false;
+                    }
+                    
+                    // Horas de apertura y cierre
+                    const inputApertura = document.querySelector('[name="apertura_' + dia + '"]');
+                    const inputCierre = document.querySelector('[name="cierre_' + dia + '"]');
+                    
+                    if (inputApertura) inputApertura.value = horario.apertura || '09:00';
+                    if (inputCierre) inputCierre.value = horario.cierre || '22:00';
+                }
+            });
+        }
+    })
+    .catch(error => console.error('Error cargando horarios:', error));
+}
+
+// ✅ Cargar configuración de Telegram al abrir la pestaña
+document.getElementById('telegram-tab').addEventListener('click', function() {
+    cargarConfiguracionTelegram();
+});
+
+function cargarConfiguracionTelegram() {
+    console.log('🔄 Cargando configuración de Telegram...');
+    
+    fetch('/api/restaurante/config')
+    .then(response => response.json())
+    .then(data => {
+        console.log('📥 Datos recibidos:', data);
+        
+        if (data.success && data.restaurante) {
+            const rest = data.restaurante;
+            
+            // Llenar campos básicos
+            if (rest.bot_token) {
+                document.querySelector('[name="bot_token"]').value = rest.bot_token;
+                console.log('✅ Bot token cargado');
+            }
+            if (rest.telegram_admin_id) {
+                document.querySelector('[name="telegram_admin_id"]').value = rest.telegram_admin_id;
+                console.log('✅ Admin ID cargado:', rest.telegram_admin_id);
+            }
+            if (rest.telegram_group_id) {
+                document.querySelector('[name="telegram_group_id"]').value = rest.telegram_group_id;
+                console.log('✅ Group ID cargado:', rest.telegram_group_id);
+            }
+            
+            // Checkboxes de notificaciones
+            if (rest.config_notificaciones) {
+                const config = typeof rest.config_notificaciones === 'string' 
+                    ? JSON.parse(rest.config_notificaciones) 
+                    : rest.config_notificaciones;
+                
+                console.log('📋 Config notificaciones:', config);
+                
+                document.getElementById('notificar_pedidos').checked = config.notificar_pedidos !== false;
+                document.getElementById('notificar_reservaciones').checked = config.notificar_reservaciones !== false;
+                
+                console.log('✅ Checkboxes configurados');
+            } else {
+                // Por defecto, activar todas las notificaciones
+                document.getElementById('notificar_pedidos').checked = true;
+                document.getElementById('notificar_reservaciones').checked = true;
+                console.log('ℹ️ Usando valores por defecto para notificaciones');
+            }
+        }
+    })
+    .catch(error => {
+        console.error('❌ Error cargando Telegram:', error);
+    });
+}
+
+// ✅ Cargar configuración general al cargar la página
+window.addEventListener('DOMContentLoaded', function() {
+    cargarConfiguracionGeneral();
+});
+
+function cargarConfiguracionGeneral() {
+    fetch('/api/restaurante/config')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.restaurante) {
+            const rest = data.restaurante;
+            
+            // Llenar campos generales (solo los que no vienen del backend en el template)
+            if (rest.logo_url) {
+                document.querySelector('[name="logo_url"]').value = rest.logo_url;
+            }
+            if (rest.banner_url) {
+                document.querySelector('[name="banner_url"]').value = rest.banner_url;
+            }
+        }
+    })
+    .catch(error => console.error('Error cargando config general:', error));
 }
 </script>
 {% endblock %}
