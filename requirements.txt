@@ -4,4 +4,4 @@ mysql-connector-python==8.2.0
 python-dotenv==1.0.0
 bcrypt==4.1.2
 pyTelegramBotAPI==4.14.0
-gunicorn==21.2.0    ← ESTA LÍNEA
+gunicorn==21.2.0
