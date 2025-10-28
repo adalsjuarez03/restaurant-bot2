@@ -85,39 +85,6 @@
             50% { opacity: 0.5; }
         }
 
-        .quick-actions {
-            padding: 8px 12px;
-            background: white;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            gap: 6px;
-            overflow-x: auto;
-            flex-shrink: 0;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .quick-actions::-webkit-scrollbar {
-            display: none;
-        }
-
-        .quick-action-btn {
-            padding: 6px 12px;
-            background: #f0f0f0;
-            border: none;
-            border-radius: 15px;
-            font-size: 12px;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.2s;
-            flex-shrink: 0;
-        }
-
-        .quick-action-btn:active {
-            background: #8B4513;
-            color: white;
-            transform: scale(0.95);
-        }
-
         .chat-messages {
             flex: 1;
             padding: 15px;
@@ -362,16 +329,6 @@
                 font-size: 13px;
             }
 
-            .quick-actions {
-                padding: 10px 20px;
-            }
-
-            .quick-action-btn:hover {
-                background: #8B4513;
-                color: white;
-                transform: translateY(-2px);
-            }
-
             .chat-messages {
                 padding: 20px;
             }
@@ -401,16 +358,6 @@
                 <h2>🍽️ {{ restaurante.nombre_restaurante }}</h2>
                 <p><span class="status-indicator"></span>En línea</p>
             </div>
-        </div>
-
-        <!-- Acciones Rápidas -->
-        <div class="quick-actions">
-            <button class="quick-action-btn" onclick="sendQuickMessage('Ver menú')">🍽️ Menú</button>
-            <button class="quick-action-btn" onclick="sendQuickMessage('Reservar mesa')">📅 Reservar</button>
-            <button class="quick-action-btn" onclick="sendQuickMessage('Precios')">💰 Precios</button>
-            <button class="quick-action-btn" onclick="sendQuickMessage('Delivery')">🚗 Delivery</button>
-            <button class="quick-action-btn" onclick="sendQuickMessage('Horarios')">🕐 Horarios</button>
-            <button class="quick-action-btn" onclick="sendQuickMessage('Contacto')">📞 Contacto</button>
         </div>
 
         <!-- Mensajes del Chat -->
@@ -515,11 +462,6 @@
                     sendButton.disabled = false;
                 });
             }, 800 + Math.random() * 1000);
-        }
-
-        function sendQuickMessage(message) {
-            chatInput.value = message;
-            sendMessage();
         }
 
         function addMessage(text, isUser) {
