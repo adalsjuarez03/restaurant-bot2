@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>🍽️ {{ restaurante.nombre_restaurante }} - Chat</title>
     <style>
         * {
@@ -11,70 +11,68 @@
             box-sizing: border-box;
         }
 
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background:  #FFF8DC;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
+            background: #FFF8DC;
         }
 
         .chat-container {
             width: 100%;
-            max-width: 500px;
-            height: 90vh;
-            max-height: 800px;
+            height: 100vh;
+            height: 100dvh; /* Altura dinámica del viewport */
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            animation: slideUp 0.5s ease-out;
-        }
-
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
         }
 
         .chat-header {
             background: #8B4513;
             color: white;
-            padding: 20px;
+            padding: 12px 15px;
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 12px;
+            flex-shrink: 0;
+            min-height: 60px;
         }
 
         .chat-header img {
-            width: 50px;
-            height: 50px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
-            border: 3px solid white;
+            border: 2px solid white;
+            flex-shrink: 0;
+        }
+
+        .chat-header-info {
+            flex: 1;
+            min-width: 0;
         }
 
         .chat-header-info h2 {
-            font-size: 20px;
-            margin-bottom: 5px;
+            font-size: 16px;
+            margin-bottom: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .chat-header-info p {
-            font-size: 13px;
+            font-size: 12px;
             opacity: 0.9;
         }
 
         .status-indicator {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             background: #00ff88;
             border-radius: 50%;
             display: inline-block;
@@ -87,29 +85,64 @@
             50% { opacity: 0.5; }
         }
 
+        .quick-actions {
+            padding: 8px 12px;
+            background: white;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            flex-shrink: 0;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .quick-actions::-webkit-scrollbar {
+            display: none;
+        }
+
+        .quick-action-btn {
+            padding: 6px 12px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 15px;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .quick-action-btn:active {
+            background: #8B4513;
+            color: white;
+            transform: scale(0.95);
+        }
+
         .chat-messages {
             flex: 1;
-            padding: 20px;
+            padding: 15px;
             overflow-y: auto;
+            overflow-x: hidden;
             background: #f5f5f5;
-            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            min-height: 0;
         }
 
         .chat-messages::-webkit-scrollbar {
-            width: 8px;
+            width: 4px;
         }
 
         .chat-messages::-webkit-scrollbar-track {
-            background: #f1f1f1;
+            background: transparent;
         }
 
         .chat-messages::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 4px;
+            background: #ccc;
+            border-radius: 2px;
         }
 
         .message {
-            margin-bottom: 15px;
+            margin-bottom: 12px;
             display: flex;
             animation: fadeIn 0.3s ease-out;
         }
@@ -130,11 +163,13 @@
         }
 
         .message-content {
-            max-width: 75%;
-            padding: 12px 16px;
-            border-radius: 18px;
+            max-width: 80%;
+            padding: 10px 14px;
+            border-radius: 16px;
             position: relative;
             word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.4;
         }
 
         .message.user .message-content {
@@ -151,19 +186,20 @@
         }
 
         .message-time {
-            font-size: 11px;
+            font-size: 10px;
             opacity: 0.7;
-            margin-top: 5px;
+            margin-top: 4px;
             text-align: right;
         }
 
         .typing-indicator {
             display: none;
-            padding: 12px 16px;
+            padding: 10px 14px;
             background: white;
-            border-radius: 18px;
+            border-radius: 16px;
             width: fit-content;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            margin: 0 15px 10px 15px;
         }
 
         .typing-indicator.active {
@@ -173,8 +209,8 @@
 
         .typing-indicator span {
             display: inline-block;
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
             background: #999;
             border-radius: 50%;
             margin: 0 2px;
@@ -194,135 +230,164 @@
                 transform: translateY(0);
             }
             30% {
-                transform: translateY(-10px);
+                transform: translateY(-8px);
             }
         }
 
         .chat-input-container {
-            padding: 15px 20px;
+            padding: 10px 12px;
+            padding-bottom: max(10px, env(safe-area-inset-bottom));
             background: white;
             border-top: 1px solid #eee;
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
+            flex-shrink: 0;
         }
 
         .chat-input {
             flex: 1;
             border: 2px solid #e0e0e0;
-            border-radius: 25px;
-            padding: 12px 20px;
+            border-radius: 20px;
+            padding: 10px 15px;
             font-size: 14px;
             outline: none;
             transition: all 0.3s;
+            min-height: 40px;
+            max-height: 100px;
         }
 
         .chat-input:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            border-color: #8B4513;
+            box-shadow: 0 0 0 2px rgba(139, 69, 19, 0.1);
         }
 
         .send-button {
-            width: 45px;
-            height: 45px;
+            width: 40px;
+            height: 40px;
             border: none;
             border-radius: 50%;
-            background:#8B4513;
+            background: #8B4513;
             color: white;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: transform 0.2s, box-shadow 0.2s;
-            font-size: 20px;
-        }
-
-        .send-button:hover {
-            transform: scale(1.1);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            transition: transform 0.2s;
+            font-size: 18px;
+            flex-shrink: 0;
         }
 
         .send-button:active {
-            transform: scale(0.95);
+            transform: scale(0.9);
         }
 
         .send-button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-            transform: scale(1);
-        }
-
-        .quick-actions {
-            padding: 10px 20px;
-            background: white;
-            border-top: 1px solid #eee;
-            display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            flex-wrap: wrap;
-        }
-
-        .quick-actions::-webkit-scrollbar {
-            height: 4px;
-        }
-
-        .quick-action-btn {
-            padding: 8px 16px;
-            background: #f0f0f0;
-            border: none;
-            border-radius: 20px;
-            font-size: 13px;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.2s;
-        }
-
-        .quick-action-btn:hover {
-            background: #667eea;
-            color: white;
-            transform: translateY(-2px);
         }
 
         .welcome-message {
             text-align: center;
-            padding: 30px 20px;
+            padding: 20px 15px;
             color: #666;
         }
 
         .welcome-message h3 {
-            color: #667eea;
+            color: #8B4513;
             margin-bottom: 10px;
-            font-size: 24px;
+            font-size: 20px;
         }
 
         .welcome-message p {
-            font-size: 14px;
-            line-height: 1.6;
+            font-size: 13px;
+            line-height: 1.5;
         }
 
-        @media (max-width: 600px) {
-            .chat-container {
-                height: 100vh;
-                max-height: 100vh;
-                max-width: 100%;
-                border-radius: 0;
+        /* Desktop */
+        @media (min-width: 768px) {
+            body {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 20px;
+                position: static;
+                overflow: auto;
             }
 
-            body {
-                padding: 0;
+            html, body {
+                height: 100%;
+                overflow: auto;
+                position: static;
+            }
+
+            .chat-container {
+                width: 100%;
+                max-width: 500px;
+                height: 90vh;
+                max-height: 800px;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                animation: slideUp 0.5s ease-out;
+            }
+
+            @keyframes slideUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(30px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
             }
 
             .chat-header {
-                padding: 15px;
+                padding: 20px;
+                border-radius: 20px 20px 0 0;
             }
 
             .chat-header img {
-                width: 40px;
-                height: 40px;
+                width: 50px;
+                height: 50px;
+                border: 3px solid white;
             }
 
             .chat-header-info h2 {
-                font-size: 18px;
+                font-size: 20px;
+                margin-bottom: 5px;
+            }
+
+            .chat-header-info p {
+                font-size: 13px;
+            }
+
+            .quick-actions {
+                padding: 10px 20px;
+            }
+
+            .quick-action-btn:hover {
+                background: #8B4513;
+                color: white;
+                transform: translateY(-2px);
+            }
+
+            .chat-messages {
+                padding: 20px;
+            }
+
+            .message-content {
+                max-width: 75%;
+                font-size: 14px;
+            }
+
+            .chat-input-container {
+                padding: 15px 20px;
+            }
+
+            .send-button:hover {
+                transform: scale(1.1);
+                box-shadow: 0 5px 15px rgba(139, 69, 19, 0.4);
             }
         }
     </style>
@@ -334,7 +399,7 @@
             <img src="https://www.shutterstock.com/image-vector/restaurant-logo-food-service-vector-600w-454784548.jpg" alt="{{ restaurante.nombre_restaurante }}">
             <div class="chat-header-info">
                 <h2>🍽️ {{ restaurante.nombre_restaurante }}</h2>
-                <p><span class="status-indicator"></span>En línea - Responde al instante</p>
+                <p><span class="status-indicator"></span>En línea</p>
             </div>
         </div>
 
@@ -371,7 +436,7 @@
                 type="text" 
                 class="chat-input" 
                 id="chatInput" 
-                placeholder="Escribe tu mensaje aquí..."
+                placeholder="Escribe tu mensaje..."
                 autocomplete="off"
             >
             <button class="send-button" id="sendButton" onclick="sendMessage()">
@@ -381,10 +446,9 @@
     </div>
 
     <script>
-        const API_URL = '/api';  // ✅ Ruta relativa
+        const API_URL = '/api';
         const sessionId = 'web_' + Date.now();
         
-        // ✅ NUEVO: Slug del restaurante desde el servidor
         const restauranteSlug = "{{ restaurante.slug }}";
         const restauranteNombre = "{{ restaurante.nombre_restaurante }}";
         
@@ -396,8 +460,16 @@
         // Permitir enviar con Enter
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
+                e.preventDefault();
                 sendMessage();
             }
+        });
+
+        // Ajustar scroll cuando aparece el teclado en móvil
+        chatInput.addEventListener('focus', () => {
+            setTimeout(() => {
+                scrollToBottom();
+            }, 300);
         });
 
         function sendMessage() {
@@ -405,22 +477,13 @@
             
             if (!message) return;
 
-            // Agregar mensaje del usuario
             addMessage(message, true);
-            
-            // Limpiar input
             chatInput.value = '';
-            
-            // Deshabilitar botón
             sendButton.disabled = true;
-            
-            // Mostrar indicador de escritura
             typingIndicator.classList.add('active');
             scrollToBottom();
 
-            // Simular delay de respuesta realista
             setTimeout(() => {
-                // Enviar mensaje al servidor
                 fetch(`${API_URL}/send_message`, {
                     method: 'POST',
                     headers: {
@@ -429,22 +492,19 @@
                     body: JSON.stringify({
                         message: message,
                         session_id: sessionId,
-                        restaurante_slug: restauranteSlug  // ✅ NUEVO
+                        restaurante_slug: restauranteSlug
                     })
                 })
                 .then(response => response.json())
                 .then(data => {
-                    // Ocultar indicador
                     typingIndicator.classList.remove('active');
                     
                     if (data.success) {
-                        // Agregar respuesta del bot
                         addMessage(data.bot_response, false);
                     } else {
                         addMessage('Lo siento, hubo un error. Por favor intenta de nuevo.', false);
                     }
                     
-                    // Habilitar botón
                     sendButton.disabled = false;
                     chatInput.focus();
                 })
@@ -454,7 +514,7 @@
                     addMessage('Error de conexión. Verifica que el servidor esté corriendo.', false);
                     sendButton.disabled = false;
                 });
-            }, 800 + Math.random() * 1000); // Delay realista entre 800ms y 1800ms
+            }, 800 + Math.random() * 1000);
         }
 
         function sendQuickMessage(message) {
@@ -470,7 +530,6 @@
             const time = now.getHours().toString().padStart(2, '0') + ':' + 
                         now.getMinutes().toString().padStart(2, '0');
             
-            // Convertir saltos de línea a <br>
             const formattedText = text.replace(/\n/g, '<br>');
             
             messageDiv.innerHTML = `
@@ -485,15 +544,18 @@
         }
 
         function scrollToBottom() {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            requestAnimationFrame(() => {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
         }
 
-        // Auto-focus en el input al cargar
         window.addEventListener('load', () => {
-            chatInput.focus();
             console.log('✅ Chat cargado para:', restauranteNombre);
             console.log('🔗 Slug:', restauranteSlug);
         });
+
+        // Prevenir zoom en iOS al hacer focus en inputs
+        document.addEventListener('touchstart', function() {}, {passive: true});
     </script>
 </body>
 </html>
