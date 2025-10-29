@@ -271,6 +271,39 @@
             line-height: 1.5;
         }
 
+        /* Estilos para el botón de PayPal */
+        .btn-paypal {
+            background: #0070ba;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 10px 0;
+            width: 100%;
+            max-width: 300px;
+            display: block;
+            transition: all 0.3s;
+        }
+
+        .btn-paypal:hover {
+            background: #005a94;
+            transform: scale(1.05);
+        }
+
+        .btn-paypal:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: scale(1);
+        }
+
+        .paypal-button-container {
+            text-align: center;
+            padding: 10px;
+        }
+
         /* Desktop */
         @media (min-width: 768px) {
             body {
@@ -345,6 +378,10 @@
             .send-button:hover {
                 transform: scale(1.1);
                 box-shadow: 0 5px 15px rgba(139, 69, 19, 0.4);
+            }
+
+            .btn-paypal {
+                max-width: 250px;
             }
         }
     </style>
@@ -447,7 +484,25 @@
                     typingIndicator.classList.remove('active');
                     
                     if (data.success) {
-                        addMessage(data.bot_response, false);
+                        // ==================== MODIFICACIÓN: DETECTAR CONFIRMACIÓN DE PEDIDO ====================
+                        if (data.bot_response.includes('¡PEDIDO CONFIRMADO!')) {
+                            addMessage(data.bot_response, false);
+                            
+                            // Agregar botón de PayPal
+                            const btnPayPal = document.createElement('button');
+                            btnPayPal.id = 'btn-pagar-paypal';
+                            btnPayPal.className = 'btn-paypal';
+                            btnPayPal.innerHTML = '💳 Pagar con PayPal';
+                            btnPayPal.onclick = procesarPagoPayPal;
+                            
+                            // Agregar el botón al chat
+                            const btnContainer = document.createElement('div');
+                            btnContainer.className = 'paypal-button-container';
+                            btnContainer.appendChild(btnPayPal);
+                            chatMessages.appendChild(btnContainer);
+                        } else {
+                            addMessage(data.bot_response, false);
+                        }
                     } else {
                         addMessage('Lo siento, hubo un error. Por favor intenta de nuevo.', false);
                     }
@@ -488,6 +543,62 @@
         function scrollToBottom() {
             requestAnimationFrame(() => {
                 chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+        }
+
+        // ==================== FUNCIÓN PARA PROCESAR PAGO CON PAYPAL ====================
+        function procesarPagoPayPal() {
+            // Deshabilitar botón mientras se procesa
+            const btnPagar = document.getElementById('btn-pagar-paypal');
+            if (btnPagar) {
+                btnPagar.disabled = true;
+                btnPagar.innerHTML = '⏳ Procesando...';
+            }
+            
+            // Crear pago en PayPal
+            fetch(`/api/create-payment`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    restaurante_slug: restauranteSlug
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Redirigir a PayPal
+                    window.open(data.approval_url, '_blank');
+                    
+                    // Mostrar mensaje de espera
+                    addMessage('✅ Redirigiendo a PayPal para completar el pago...', false);
+                    addMessage('⏳ Por favor, completa el pago en la ventana de PayPal que se abrió.', false);
+                    addMessage('📱 Te notificaremos cuando se confirme el pago.', false);
+                    
+                    // Habilitar botón de nuevo
+                    if (btnPagar) {
+                        btnPagar.disabled = false;
+                        btnPagar.innerHTML = '💳 Pagar con PayPal';
+                    }
+                } else {
+                    addMessage('❌ Error al crear el pago: ' + data.error, false);
+                    
+                    if (btnPagar) {
+                        btnPagar.disabled = false;
+                        btnPagar.innerHTML = '💳 Pagar con PayPal';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                addMessage('❌ Error de conexión. Por favor intenta de nuevo.', false);
+                
+                if (btnPagar) {
+                    btnPagar.disabled = false;
+                    btnPagar.innerHTML = '💳 Pagar con PayPal';
+                }
             });
         }
 

@@ -31,6 +31,7 @@ from database.database_multirestaurante import DatabaseManager
 import threading
 import time
 import random
+from database.payment_manager import payment_manager
 
 app = Flask(__name__)
 CORS(app)
@@ -360,6 +361,27 @@ def send_notification_to_group(notification_type, data, session):
 👤 Usuario: {session.customer_name or 'Sin registrar'}
 💬 Mensaje: {data['message']}
 ⏰ {datetime.now().strftime('%H:%M')}"""
+        
+        # ==================== AGREGAR NUEVO TIPO DE NOTIFICACIÓN ====================
+        elif notification_type == "payment_confirmed":
+            message = f"""💰 PAGO CONFIRMADO - PAYPAL
+
+🎫 Pedido: #{data.get('numero_pedido', 'N/A')}
+💳 Transacción: {data['transaction_id']}
+💵 Monto: ${data['total']}
+
+👤 Cliente: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+📍 Dirección: {session.customer_address}
+
+✅ Estado: PAGADO
+🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}
+
+🔔 ¡Pedido listo para preparar!"""
+        
+        else:
+            print(f"⚠️ Tipo de notificación no reconocido: {notification_type}")
+            return
         
         # ✅ Enviar mensaje con el bot del restaurante
         bot_restaurante.send_message(target_chat, message)
@@ -986,41 +1008,65 @@ Antes de empezar, necesito conocerte un poco mejor.
             elif session.registration_step == "waiting_address":
                 if len(text) < 10:
                     return "❌ Por favor proporciona una dirección más completa"
-                
+    
                 session.customer_address = text
-                
+                session.registration_step = "waiting_email"  # ← NUEVO: Ir al paso de email
+    
+                return """✅ Dirección guardada!
+
+            📧 Por último, ¿cuál es tu correo electrónico?
+            (Necesario para enviarte el recibo de PayPal)
+
+            Ejemplo: tucorreo@gmail.com"""
+
+# ==================== AGREGAR ESTE NUEVO BLOQUE DESPUÉS ====================
+            elif session.registration_step == "waiting_email":
+                # Validar email básico
+                import re
+                email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    
+                if not re.match(email_pattern, text):
+                    return "❌ Por favor ingresa un correo electrónico válido\nEjemplo: tucorreo@gmail.com"
+    
+                session.customer_email = text
+    
+                # AHORA SÍ crear el cliente con todos los datos
                 cliente = db.get_or_create_cliente(
                     web_session_id=session.session_id,
                     nombre=session.customer_name,
                     restaurante_id=restaurante_id,
                     origen="web"
                 )
-                
+    
                 if cliente:
                     session.cliente_id = cliente['id']
-                    
+        
+                    # Actualizar con TODOS los datos incluyendo email
                     db.actualizar_cliente(
                         session.cliente_id,
                         telefono=session.customer_phone,
-                        direccion=session.customer_address
+                        direccion=session.customer_address,
+                        email=session.customer_email  # ← AGREGAR EMAIL
                     )
-                    
+        
                     session.is_registered = True
                     session.registration_step = "completed"
-                    
+        
                     return f"""✅ ¡Registro completado!
 
-📝 Tus datos:
-👤 Nombre: {session.customer_name}
-📱 Teléfono: {session.customer_phone}
-📍 Dirección: {session.customer_address}
+            📝 Tus datos:
+            👤 Nombre: {session.customer_name}
+            📱 Teléfono: {session.customer_phone}
+            📍 Dirección: {session.customer_address}
+            📧 Email: {session.customer_email}
 
-🎉 ¡Perfecto! Ahora ya puedes hacer tu pedido.
+            🎉 ¡Perfecto! Ahora ya puedes hacer tu pedido.
 
-Escribe "menu" para ver nuestras deliciosas opciones 🍽"""
+            Escribe "menu" para ver nuestras deliciosas opciones 🍽"""
                 else:
-                    return "❌ Error al registrar tus datos. Por favor intenta de nuevo."
-        
+                    return "❌ Error al registrar tus datos. Por favor intenta de nuevo."  
+                
+                
         respuesta_dinamica = generar_respuesta_dinamica(session, text_lower, restaurante_id)
         if respuesta_dinamica:
             return respuesta_dinamica
@@ -1286,6 +1332,198 @@ Para ordenar, escribe:
 def run_flask_server():
     app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
 
+@app.route('/api/create-payment', methods=['POST'])
+def create_payment():
+    """Crear pago en PayPal"""
+    try:
+        data = request.json
+        session_id = data.get('session_id')
+        
+        if session_id not in chat_sessions:
+            return jsonify({'success': False, 'error': 'Sesión no encontrada'}), 404
+        
+        session = chat_sessions[session_id]
+        
+        # Verificar que haya un pedido
+        if not session.pedido_id:
+            return jsonify({'success': False, 'error': 'No hay pedido activo'}), 400
+        
+        # Obtener datos del pedido desde la BD
+        pedido = db.get_pedido(session.pedido_id)
+        detalles = db.get_detalle_pedido(session.pedido_id)
+        
+        if not pedido or not detalles:
+            return jsonify({'success': False, 'error': 'Error obteniendo datos del pedido'}), 500
+        
+        # Construir datos para PayPal
+        items_list = []
+        for detalle in detalles:
+            items_list.append({
+                'nombre': detalle['item_nombre'],
+                'codigo': f"ITEM-{detalle['item_id']}",
+                'cantidad': detalle['cantidad'],
+                'precio': float(detalle['precio_unitario'])
+            })
+        
+        pedido_data = {
+            'numero_pedido': pedido['numero_pedido'],
+            'items': items_list,
+            'subtotal': float(pedido['subtotal']),
+            'costo_envio': float(pedido.get('costo_envio', 0)),
+            'total': float(pedido['total']),
+            'moneda': 'MXN',
+            'restaurante_nombre': pedido['nombre_restaurante']
+        }
+        
+        # URLs de retorno
+        restaurante_slug = data.get('restaurante_slug')
+        return_url = f"http://localhost:5000/{restaurante_slug}/payment-success?session_id={session_id}"
+        cancel_url = f"http://localhost:5000/{restaurante_slug}/payment-cancel?session_id={session_id}"
+        
+        # Crear pago en PayPal
+        resultado = payment_manager.crear_pago(pedido_data, return_url, cancel_url)
+        
+        if resultado['success']:
+            # Guardar payment_id en la sesión y en la BD
+            session.payment_id = resultado['payment_id']
+            
+            from database.database_multirestaurante import get_db_cursor
+            with get_db_cursor() as (cursor, conn):
+                cursor.execute("""
+                    UPDATE pedidos 
+                    SET payment_id = %s, estado = 'pendiente_pago'
+                    WHERE id = %s
+                """, (resultado['payment_id'], session.pedido_id))
+                conn.commit()
+            
+            return jsonify({
+                'success': True,
+                'approval_url': resultado['approval_url'],
+                'payment_id': resultado['payment_id']
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': resultado.get('error', 'Error desconocido')
+            }), 500
+            
+    except Exception as e:
+        print(f"❌ Error en create-payment: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/<slug>/payment-success')
+def payment_success(slug):
+    """Página de éxito del pago"""
+    try:
+        session_id = request.args.get('session_id')
+        payment_id = request.args.get('paymentId')
+        payer_id = request.args.get('PayerID')
+        
+        if not session_id or not payment_id or not payer_id:
+            return "<h1>❌ Datos de pago incompletos</h1>", 400
+        
+        session = chat_sessions.get(session_id)
+        if not session:
+            return "<h1>❌ Sesión no encontrada</h1>", 404
+        
+        # Ejecutar el pago
+        resultado = payment_manager.ejecutar_pago(payment_id, payer_id)
+        
+        if resultado['success']:
+            # Actualizar estado del pedido en la BD
+            from database.database_multirestaurante import get_db_cursor
+            with get_db_cursor() as (cursor, conn):
+                cursor.execute("""
+                    UPDATE pedidos 
+                    SET estado = 'pagado', 
+                        transaction_id = %s,
+                        fecha_pago = NOW()
+                    WHERE id = %s
+                """, (resultado['transaction_id'], session.pedido_id))
+                conn.commit()
+            
+            # Obtener datos del pedido para la notificación
+            pedido = db.get_pedido(session.pedido_id)
+            
+            # Notificar a Telegram - USANDO EL NUEVO TIPO DE NOTIFICACIÓN
+            send_notification_to_group("payment_confirmed", {
+                'numero_pedido': pedido['numero_pedido'],
+                'transaction_id': resultado['transaction_id'],
+                'total': pedido['total']
+            }, session)
+            
+            # Generar factura (opcional)
+            cliente_data = {
+                'nombre': session.customer_name,
+                'email': session.customer_email or '',
+                'telefono': session.customer_phone,
+                'direccion': session.customer_address,
+                'ciudad': '',
+                'estado': '',
+                'codigo_postal': ''
+            }
+            
+            detalles = db.get_detalle_pedido(session.pedido_id)
+            items_list = []
+            for detalle in detalles:
+                items_list.append({
+                    'nombre': detalle['item_nombre'],
+                    'cantidad': detalle['cantidad'],
+                    'precio': float(detalle['precio_unitario'])
+                })
+            
+            pedido_data = {
+                'numero_pedido': pedido['numero_pedido'],
+                'items': items_list,
+                'subtotal': float(pedido['subtotal']),
+                'costo_envio': float(pedido.get('costo_envio', 0)),
+                'total': float(pedido['total']),
+                'moneda': 'MXN',
+                'restaurante_nombre': pedido['nombre_restaurante']
+            }
+            
+            factura_result = payment_manager.generar_factura(pedido_data, cliente_data)
+            if factura_result['success']:
+                print(f"✅ Factura generada: {factura_result.get('invoice_id')}")
+            
+            return render_template('public/payment_success.html', 
+                                 transaction_id=resultado['transaction_id'],
+                                 pedido_numero=pedido['numero_pedido'],
+                                 total=pedido['total'])
+        else:
+            return f"<h1>❌ Error procesando pago</h1><p>{resultado.get('error')}</p>", 500
+            
+    except Exception as e:
+        print(f"❌ Error en payment-success: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"<h1>❌ Error</h1><p>{str(e)}</p>", 500
+
+
+@app.route('/<slug>/payment-cancel')
+def payment_cancel(slug):
+    """Página de cancelación del pago"""
+    session_id = request.args.get('session_id')
+    
+    if session_id and session_id in chat_sessions:
+        session = chat_sessions[session_id]
+        
+        # Actualizar estado del pedido
+        if session.pedido_id:
+            from database.database_multirestaurante import get_db_cursor
+            with get_db_cursor() as (cursor, conn):
+                cursor.execute("""
+                    UPDATE pedidos 
+                    SET estado = 'cancelado_pago'
+                    WHERE id = %s
+                """, (session.pedido_id,))
+                conn.commit()
+    
+    return render_template('public/payment_cancel.html')
+
 if __name__ == "__main__":
     print("=" * 60)
     print("🌐 Iniciando Servidor Web para Bot de Restaurante")
@@ -1298,6 +1536,7 @@ if __name__ == "__main__":
     print("📅 SISTEMA DE RESERVACIONES INTEGRADO")
     print("🕐 HORARIOS Y DELIVERY DINÁMICOS DESDE BD")
     print("🤖 NOTIFICACIONES TELEGRAM DINÁMICAS POR RESTAURANTE")
+    print("💰 SISTEMA DE PAGOS PAYPAL INTEGRADO")
     print("=" * 60)
     
     run_flask_server()

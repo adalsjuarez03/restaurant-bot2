@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✅ Pago Exitoso</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+            text-align: center;
+            animation: slideUp 0.5s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #10b981;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 20px;
+            animation: scaleIn 0.5s ease-out 0.2s both;
+        }
+        
+        @keyframes scaleIn {
+            from {
+                transform: scale(0);
+            }
+            to {
+                transform: scale(1);
+            }
+        }
+        
+        .success-icon svg {
+            width: 50px;
+            height: 50px;
+            stroke: white;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
+        
+        h1 {
+            color: #10b981;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #64748b;
+            font-size: 16px;
+            margin-bottom: 30px;
+        }
+        
+        .info-box {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-label {
+            color: #64748b;
+            font-size: 14px;
+        }
+        
+        .info-value {
+            color: #1e293b;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .total-row {
+            background: #10b981;
+            color: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+        
+        .total-row .info-label,
+        .total-row .info-value {
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        .message {
+            color: #64748b;
+            font-size: 14px;
+            margin-top: 20px;
+            line-height: 1.6;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .success-icon {
+                width: 60px;
+                height: 60px;
+            }
+            
+            .success-icon svg {
+                width: 40px;
+                height: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">
+            <svg viewBox="0 0 24 24">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+        </div>
+        
+        <h1>¡Pago Exitoso!</h1>
+        <p class="subtitle">Tu pedido ha sido confirmado</p>
+        
+        <div class="info-box">
+            <div class="info-row">
+                <span class="info-label">Número de Pedido:</span>
+                <span class="info-value">#{{ pedido_numero }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">ID de Transacción:</span>
+                <span class="info-value">{{ transaction_id[:20] }}...</span>
+            </div>
+            <div class="total-row">
+                <div class="info-row">
+                    <span class="info-label">Total Pagado:</span>
+                    <span class="info-value">${{ "%.2f"|format(total) }}</span>
+                </div>
+            </div>
+        </div>
+        
+        <p class="message">
+            ✅ <strong>Pago procesado correctamente</strong><br><br>
+            📧 Recibirás un recibo de PayPal en tu correo electrónico<br>
+            📱 Te contactaremos pronto para coordinar la entrega<br>
+            🍽️ Prepararemos tu pedido con mucho cariño
+        </p>
+        
+        <a href="javascript:window.close()" class="btn">Cerrar Ventana</a>
+    </div>
+</body>
+</html>
