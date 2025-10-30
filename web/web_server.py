@@ -33,6 +33,8 @@ import time
 import random
 from database.payment_manager import payment_manager
 
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:5000')
+
 app = Flask(__name__)
 CORS(app)
 
@@ -1377,8 +1379,8 @@ def create_payment():
         
         # URLs de retorno
         restaurante_slug = data.get('restaurante_slug')
-        return_url = f"http://localhost:5000/{restaurante_slug}/payment-success?session_id={session_id}"
-        cancel_url = f"http://localhost:5000/{restaurante_slug}/payment-cancel?session_id={session_id}"
+        return_url = f"{BASE_URL}/{restaurante_slug}/payment-success?session_id={session_id}"
+        cancel_url = f"{BASE_URL}/{restaurante_slug}/payment-cancel?session_id={session_id}"
         
         # Crear pago en PayPal
         resultado = payment_manager.crear_pago(pedido_data, return_url, cancel_url)
