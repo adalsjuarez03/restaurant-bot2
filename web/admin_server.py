@@ -1170,6 +1170,57 @@ def api_dashboard_datos():
             'success': False,
             'message': str(e)
         }), 500
+    
+
+@app.route('/api/reservaciones/recientes')
+@login_required
+def api_reservaciones_recientes():
+    """API: Obtener reservaciones recientes para actualización automática"""
+    try:
+        user = get_current_user()
+        restaurante_id = user['restaurante_id']
+        
+        reservaciones = db.get_reservaciones_restaurante(restaurante_id, limit=50)
+        
+        # Convertir timedelta y datetime a string
+        from datetime import timedelta, date
+        for reservacion in reservaciones:
+            if reservacion.get('hora_reservacion'):
+                if isinstance(reservacion['hora_reservacion'], timedelta):
+                    td = reservacion['hora_reservacion']
+                    total_seconds = int(td.total_seconds())
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    reservacion['hora_reservacion'] = f"{hours:02d}:{minutes:02d}"
+            
+            if reservacion.get('fecha_reservacion'):
+                if isinstance(reservacion['fecha_reservacion'], date):
+                    reservacion['fecha_reservacion'] = reservacion['fecha_reservacion'].strftime('%Y-%m-%d')
+        
+        # Calcular estadísticas
+        from datetime import date
+        hoy = date.today()
+        
+        stats = {
+            'hoy': sum(1 for r in reservaciones if str(r.get('fecha_reservacion')) == str(hoy)),
+            'pendientes': sum(1 for r in reservaciones if r.get('estado') == 'pendiente'),
+            'confirmadas': sum(1 for r in reservaciones if r.get('estado') == 'confirmada'),
+            'personas_hoy': sum(r.get('numero_personas', 0) for r in reservaciones if str(r.get('fecha_reservacion')) == str(hoy))
+        }
+        
+        return jsonify({
+            'success': True,
+            'reservaciones': reservaciones,
+            'stats': stats
+        })
+    except Exception as e:
+        print(f"❌ Error obteniendo reservaciones: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
 # ==================== MANEJADORES DE ERRORES ====================
 
 @app.errorhandler(404)

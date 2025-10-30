@@ -4,14 +4,25 @@
 {% block page_title %}Gestión de Reservaciones{% endblock %}
 
 {% block content %}
-<!-- Botones de Acción -->
+<!-- Botones de Acción y Controles -->
 <div class="row mb-4">
-    <div class="col-md-6">
+    <div class="col-md-4">
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalReservacion">
             <i class="bi bi-plus-circle me-2"></i>Nueva Reservación
         </button>
     </div>
-    <div class="col-md-6 text-end">
+    <div class="col-md-4 text-center">
+        <button class="btn btn-sm btn-outline-success" id="btnAutoRefresh" onclick="toggleAutoRefresh()">
+            <i class="bi bi-play-fill"></i> Activar Auto-Refresh
+        </button>
+        <button class="btn btn-sm btn-outline-primary" onclick="cargarReservaciones()">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+        <small class="text-muted ms-2" id="lastUpdate">
+            <i class="bi bi-clock"></i> --:--:--
+        </small>
+    </div>
+    <div class="col-md-4 text-end">
         <div class="btn-group">
             <button class="btn btn-outline-secondary active" onclick="cambiarVista('lista')">
                 <i class="bi bi-list-ul"></i> Lista
@@ -24,7 +35,7 @@
 </div>
 
 <!-- Estadísticas -->
-<div class="row g-3 mb-4">
+<div class="row g-3 mb-4" id="statsCards">
     <div class="col-md-3">
         <div class="card border-0 bg-primary bg-opacity-10">
             <div class="card-body">
@@ -148,11 +159,12 @@
                             <th>Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="reservacionesTableBody">
                         {% for reservacion in reservaciones %}
                         <tr class="reservacion-row" 
                             data-estado="{{ reservacion.estado }}" 
-                            data-fecha="{{ reservacion.fecha_reservacion }}">
+                            data-fecha="{{ reservacion.fecha_reservacion }}"
+                            data-id="{{ reservacion.id }}">
                             <td>
                                 <code class="text-primary">{{ reservacion.codigo_reservacion[:8] }}</code>
                             </td>
@@ -376,34 +388,195 @@
 
 {% block extra_js %}
 <script>
-// Búsqueda
+// ============= AUTO-REFRESH =============
+let autoRefreshInterval = null;
+let lastUpdateTime = new Date();
+
+async function cargarReservaciones() {
+    try {
+        const response = await fetch('/api/reservaciones/recientes');
+        const data = await response.json();
+        
+        if (data.success) {
+            actualizarEstadisticas(data.stats);
+            actualizarTablaReservaciones(data.reservaciones);
+            
+            lastUpdateTime = new Date();
+            document.getElementById('lastUpdate').innerHTML = 
+                `<i class="bi bi-clock"></i> ${lastUpdateTime.toLocaleTimeString()}`;
+        }
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
+
+function actualizarEstadisticas(stats) {
+    document.getElementById('statsCards').innerHTML = `
+        <div class="col-md-3">
+            <div class="card border-0 bg-primary bg-opacity-10">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="rounded-circle bg-primary p-3">
+                                <i class="bi bi-calendar-check text-white" style="font-size: 24px;"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="mb-1 text-muted">Hoy</h6>
+                            <h3 class="mb-0">${stats.hoy || 0}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 bg-warning bg-opacity-10">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="rounded-circle bg-warning p-3">
+                                <i class="bi bi-clock-history text-white" style="font-size: 24px;"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="mb-1 text-muted">Pendientes</h6>
+                            <h3 class="mb-0">${stats.pendientes || 0}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 bg-success bg-opacity-10">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="rounded-circle bg-success p-3">
+                                <i class="bi bi-check-circle text-white" style="font-size: 24px;"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="mb-1 text-muted">Confirmadas</h6>
+                            <h3 class="mb-0">${stats.confirmadas || 0}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 bg-info bg-opacity-10">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="rounded-circle bg-info p-3">
+                                <i class="bi bi-people text-white" style="font-size: 24px;"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="mb-1 text-muted">Personas Hoy</h6>
+                            <h3 class="mb-0">${stats.personas_hoy || 0}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function actualizarTablaReservaciones(reservaciones) {
+    const tbody = document.getElementById('reservacionesTableBody');
+    
+    if (!reservaciones || reservaciones.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="text-center py-5 text-muted">
+                    <i class="bi bi-calendar-x" style="font-size: 64px;"></i>
+                    <p class="mt-3 mb-0">No hay reservaciones</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    let html = '';
+    reservaciones.forEach(r => {
+        const estadoBadges = {
+            'pendiente': '<span class="badge bg-warning text-dark"><i class="bi bi-clock-history"></i> Pendiente</span>',
+            'confirmada': '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Confirmada</span>',
+            'en_curso': '<span class="badge bg-primary"><i class="bi bi-hourglass-split"></i> En curso</span>',
+            'completada': '<span class="badge bg-info"><i class="bi bi-check-all"></i> Completada</span>',
+            'cancelada': '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Cancelada</span>',
+            'no_show': '<span class="badge bg-dark"><i class="bi bi-person-x"></i> No Show</span>'
+        };
+        
+        const iconoOrigen = r.origen === 'telegram' ? 'telegram' : (r.origen === 'telefono' ? 'telephone' : 'globe');
+        const fecha = new Date(r.fecha_reservacion + 'T00:00:00').toLocaleDateString('es-MX');
+        const hora = r.hora_reservacion ? r.hora_reservacion.substring(0, 5) : 'N/A';
+        
+        html += `
+            <tr class="reservacion-row" data-estado="${r.estado}" data-fecha="${r.fecha_reservacion}" data-id="${r.id}">
+                <td><code class="text-primary">${r.codigo_reservacion.substring(0, 8)}</code></td>
+                <td>
+                    <strong>${r.nombre_cliente}</strong>
+                    ${r.ocasion_especial ? `<br><small class="text-muted"><i class="bi bi-star"></i> ${r.ocasion_especial}</small>` : ''}
+                </td>
+                <td>
+                    <small><i class="bi bi-telephone"></i> ${r.telefono}
+                    ${r.email ? `<br><i class="bi bi-envelope"></i> ${r.email}` : ''}</small>
+                </td>
+                <td><i class="bi bi-calendar"></i> ${fecha}<br><i class="bi bi-clock"></i> ${hora}</td>
+                <td class="text-center"><span class="badge bg-secondary"><i class="bi bi-people"></i> ${r.numero_personas}</span></td>
+                <td class="text-center">${r.numero_mesa ? `<span class="badge bg-info">Mesa ${r.numero_mesa}</span>` : '<span class="text-muted">-</span>'}</td>
+                <td>${estadoBadges[r.estado] || r.estado}</td>
+                <td><span class="badge bg-light text-dark"><i class="bi bi-${iconoOrigen}"></i> ${r.origen.charAt(0).toUpperCase() + r.origen.slice(1)}</span></td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" onclick="verDetalleReservacion(${r.id})"><i class="bi bi-eye"></i></button>
+                        ${r.estado === 'pendiente' ? `<button class="btn btn-outline-success" onclick="confirmarReservacion(${r.id})"><i class="bi bi-check"></i></button>` : ''}
+                        ${r.estado === 'confirmada' ? `<button class="btn btn-outline-info" onclick="iniciarReservacion(${r.id})"><i class="bi bi-play"></i></button>` : ''}
+                        ${r.estado === 'en_curso' ? `<button class="btn btn-outline-success" onclick="completarReservacion(${r.id})"><i class="bi bi-check-all"></i></button>` : ''}
+                        ${!['completada', 'cancelada', 'no_show'].includes(r.estado) ? `<button class="btn btn-outline-danger" onclick="cancelarReservacion(${r.id})"><i class="bi bi-x"></i></button>` : ''}
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+}
+
+function toggleAutoRefresh() {
+    const btn = document.getElementById('btnAutoRefresh');
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> Activar Auto-Refresh';
+        btn.classList.replace('btn-success', 'btn-outline-success');
+    } else {
+        autoRefreshInterval = setInterval(cargarReservaciones, 5000);
+        btn.innerHTML = '<i class="bi bi-pause-fill"></i> Auto-Refresh Activo';
+        btn.classList.replace('btn-outline-success', 'btn-success');
+        cargarReservaciones();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => toggleAutoRefresh());
+
+// ===== MANTÉN TODO TU CÓDIGO EXISTENTE DESDE AQUÍ =====
+// (Búsqueda, filtros, guardarReservacion, verDetalleReservacion, etc.)
+
 document.getElementById('searchReservaciones').addEventListener('keyup', function(e) {
     const searchTerm = e.target.value.toLowerCase();
-    const rows = document.querySelectorAll('.reservacion-row');
-    
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(searchTerm) ? '' : 'none';
+    document.querySelectorAll('.reservacion-row').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(searchTerm) ? '' : 'none';
     });
 });
 
-// Filtrar
 function filtrarReservaciones() {
     const estado = document.getElementById('filtroEstado').value;
     const fecha = document.getElementById('filtroFecha').value;
-    const rows = document.querySelectorAll('.reservacion-row');
-    
-    rows.forEach(row => {
-        let mostrar = true;
-        
-        if (estado && row.dataset.estado !== estado) {
-            mostrar = false;
-        }
-        
-        if (fecha && row.dataset.fecha !== fecha) {
-            mostrar = false;
-        }
-        
+    document.querySelectorAll('.reservacion-row').forEach(row => {
+        const mostrar = (!estado || row.dataset.estado === estado) && (!fecha || row.dataset.fecha === fecha);
         row.style.display = mostrar ? '' : 'none';
     });
 }
@@ -412,10 +585,7 @@ function limpiarFiltros() {
     document.getElementById('filtroEstado').value = '';
     document.getElementById('filtroFecha').value = '';
     document.getElementById('searchReservaciones').value = '';
-    
-    document.querySelectorAll('.reservacion-row').forEach(row => {
-        row.style.display = '';
-    });
+    document.querySelectorAll('.reservacion-row').forEach(row => row.style.display = '');
 }
 
 // Guardar reservación
@@ -895,14 +1065,10 @@ function verDetalleReservacion(id) {
         alert('Error de conexión al cargar los detalles');
     });
 }
+
 function cambiarVista(vista) {
     // Por ahora solo lista, calendario próximamente
     alert('Vista de calendario próximamente');
 }
-
-// Auto-refresh cada 60 segundos
-setInterval(() => {
-    location.reload();
-}, 60000);
 </script>
 {% endblock %}
