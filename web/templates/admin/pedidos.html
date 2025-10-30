@@ -4,15 +4,31 @@
 {% block page_title %}Gestión de Pedidos{% endblock %}
 
 {% block content %}
-<!-- Búsqueda Simple -->
-<div class="row mb-4">
-    <div class="col-md-12">
+<!-- Búsqueda y Controles -->
+<div class="row mb-3">
+    <div class="col-md-8">
         <div class="input-group">
             <span class="input-group-text bg-white">
                 <i class="bi bi-search"></i>
             </span>
             <input type="text" class="form-control" id="searchPedidos" placeholder="Buscar por número de pedido, cliente, teléfono...">
         </div>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-outline-success" id="btnAutoRefresh" onclick="toggleAutoRefresh()">
+            <i class="bi bi-play-fill"></i> Activar Auto-Refresh
+        </button>
+        <button class="btn btn-outline-primary" onclick="cargarPedidos()">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-12">
+        <small class="text-muted" id="lastUpdate">
+            <i class="bi bi-clock"></i> Última actualización: --:--:--
+        </small>
     </div>
 </div>
 
@@ -61,7 +77,7 @@
                         </thead>
                         <tbody>
                             {% for pedido in pedidos %}
-                            <tr class="pedido-row" data-tipo="{{ pedido.tipo_pedido }}">
+                            <tr class="pedido-row" data-tipo="{{ pedido.tipo_pedido }}" data-id="{{ pedido.id }}">
                                 <td>
                                     <strong class="text-primary">#{{ pedido.numero_pedido[:10] }}</strong>
                                     <br>
@@ -101,13 +117,17 @@
                                 </td>
                                 <td>
                                     <strong class="text-success">${{ "%.2f"|format(pedido.total) }}</strong>
-                                    {% if pedido.metodo_pago %}
                                     <br>
                                     <small class="text-muted">
-                                        <i class="bi bi-{{ 'cash' if pedido.metodo_pago == 'efectivo' else 'credit-card' }}"></i>
-                                        {{ pedido.metodo_pago|title }}
+                                        {% if pedido.transaction_id %}
+                                            <i class="bi bi-credit-card-2-front"></i> PayPal
+                                        {% elif pedido.metodo_pago %}
+                                            <i class="bi bi-{{ 'cash' if pedido.metodo_pago == 'efectivo' else 'credit-card' }}"></i>
+                                            {{ pedido.metodo_pago|title }}
+                                        {% else %}
+                                            <i class="bi bi-cash"></i> Efectivo
+                                        {% endif %}
                                     </small>
-                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if pedido.estado == 'pendiente' %}
@@ -175,6 +195,193 @@
 
 {% block extra_js %}
 <script>
+// ============= AUTO-REFRESH DE PEDIDOS =============
+let autoRefreshInterval = null;
+let lastUpdateTime = new Date();
+
+// Función para cargar pedidos desde la API
+async function cargarPedidos() {
+    try {
+        const response = await fetch('/api/pedidos/recientes');
+        const data = await response.json();
+        
+        if (data.success && data.pedidos) {
+            actualizarTablaPedidos(data.pedidos);
+            lastUpdateTime = new Date();
+            document.getElementById('lastUpdate').innerHTML = 
+                `<i class="bi bi-clock"></i> Última actualización: ${lastUpdateTime.toLocaleTimeString()}`;
+        }
+    } catch (error) {
+        console.error('Error cargando pedidos:', error);
+    }
+}
+
+// Función para actualizar la tabla sin recargar página
+function actualizarTablaPedidos(pedidos) {
+    const tbody = document.querySelector('.table tbody');
+    
+    if (pedidos.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox" style="font-size: 64px;"></i>
+                    <p class="mt-3 mb-0">No hay pedidos para mostrar</p>
+                    <small>Los pedidos aparecerán aquí cuando los clientes hagan sus órdenes</small>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    // Construir HTML de las filas
+    let html = '';
+    pedidos.forEach(pedido => {
+        html += generarFilaPedido(pedido);
+    });
+    
+    tbody.innerHTML = html;
+}
+
+// Generar HTML de una fila de pedido
+function generarFilaPedido(pedido) {
+    // Determinar tipo de pedido
+    let tipoBadge = '';
+    if (pedido.tipo_pedido === 'delivery') {
+        tipoBadge = '<span class="badge bg-primary"><i class="bi bi-truck"></i> Delivery</span>';
+    } else if (pedido.tipo_pedido === 'takeaway') {
+        tipoBadge = '<span class="badge bg-warning"><i class="bi bi-bag"></i> Llevar</span>';
+    } else {
+        tipoBadge = '<span class="badge bg-success"><i class="bi bi-shop"></i> Local</span>';
+    }
+    
+    // Determinar estado
+    let estadoBadge = '';
+    switch(pedido.estado) {
+        case 'pendiente':
+            estadoBadge = '<span class="badge bg-warning text-dark"><i class="bi bi-clock-history"></i> Pendiente</span>';
+            break;
+        case 'confirmado':
+            estadoBadge = '<span class="badge bg-info"><i class="bi bi-check-circle"></i> Confirmado</span>';
+            break;
+        case 'preparando':
+            estadoBadge = '<span class="badge bg-primary"><i class="bi bi-fire"></i> Preparando</span>';
+            break;
+        case 'listo':
+            estadoBadge = '<span class="badge bg-success"><i class="bi bi-check-all"></i> Listo</span>';
+            break;
+        case 'en_camino':
+            estadoBadge = '<span class="badge bg-info"><i class="bi bi-truck"></i> En camino</span>';
+            break;
+        case 'entregado':
+            estadoBadge = '<span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Entregado</span>';
+            break;
+        case 'pagado':  // ✅ AGREGAR ESTE CASO
+            estadoBadge = '<span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Pagado</span>';
+            break;
+        case 'cancelado':
+            estadoBadge = '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Cancelado</span>';
+            break;
+        default:
+            estadoBadge = '<span class="badge bg-secondary">Desconocido</span>';
+    }
+    
+    // Formatear fecha
+    const fecha = new Date(pedido.fecha_pedido);
+    const fechaStr = fecha.toLocaleDateString('es-MX');
+    const horaStr = fecha.toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit'});
+    
+    // Método de pago
+    let metodoPago = 'Efectivo';
+    let iconoPago = 'cash';
+    
+    if (pedido.transaction_id) {
+        metodoPago = 'PayPal';
+        iconoPago = 'credit-card-2-front';
+    } else if (pedido.metodo_pago) {
+        metodoPago = pedido.metodo_pago.charAt(0).toUpperCase() + pedido.metodo_pago.slice(1);
+        iconoPago = pedido.metodo_pago === 'efectivo' ? 'cash' : 'credit-card';
+    }
+    
+    // Origen
+    const iconoOrigen = pedido.origen === 'telegram' ? 'telegram' : 'globe';
+    const origenText = pedido.origen.charAt(0).toUpperCase() + pedido.origen.slice(1);
+    
+    return `
+        <tr class="pedido-row" data-tipo="${pedido.tipo_pedido}" data-id="${pedido.id}">
+            <td>
+                <strong class="text-primary">#${pedido.numero_pedido.substring(0, 10)}</strong>
+                <br>
+                <small class="text-muted">
+                    <i class="bi bi-${iconoOrigen}"></i>
+                    ${origenText}
+                </small>
+            </td>
+            <td>
+                <div>
+                    <strong>${pedido.nombre_cliente || 'Sin nombre'}</strong>
+                    <br>
+                    <small class="text-muted">
+                        <i class="bi bi-telephone"></i> ${pedido.telefono_contacto || 'N/A'}
+                    </small>
+                </div>
+            </td>
+            <td>${tipoBadge}</td>
+            <td>
+                <small class="text-muted">
+                    ${pedido.total_items || 0} producto(s)
+                </small>
+            </td>
+            <td>
+                <strong class="text-success">$${parseFloat(pedido.total).toFixed(2)}</strong>
+                <br>
+                <small class="text-muted">
+                    <i class="bi bi-${iconoPago}"></i>
+                    ${metodoPago}
+                </small>
+            </td>
+            <td>${estadoBadge}</td>
+            <td>
+                <small>
+                    ${fechaStr}<br>
+                    ${horaStr}
+                </small>
+            </td>
+            <td>
+                <a href="/pedidos/${pedido.id}" 
+                   class="btn btn-sm btn-outline-primary" 
+                   title="Ver detalle">
+                    <i class="bi bi-eye"></i> Ver
+                </a>
+            </td>
+        </tr>
+    `;
+}
+
+// Iniciar/Detener auto-refresh
+function toggleAutoRefresh() {
+    const btn = document.getElementById('btnAutoRefresh');
+    
+    if (autoRefreshInterval) {
+        // Detener
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> Activar Auto-Refresh';
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-outline-success');
+    } else {
+        // Iniciar
+        autoRefreshInterval = setInterval(cargarPedidos, 5000); // Cada 5 segundos
+        btn.innerHTML = '<i class="bi bi-pause-fill"></i> Auto-Refresh Activo';
+        btn.classList.remove('btn-outline-success');
+        btn.classList.add('btn-success');
+        
+        // Cargar inmediatamente
+        cargarPedidos();
+    }
+}
+
+// ============= BÚSQUEDA Y FILTROS =============
+
 // Búsqueda en tiempo real
 document.getElementById('searchPedidos').addEventListener('keyup', function(e) {
     const searchTerm = e.target.value.toLowerCase();
@@ -206,6 +413,12 @@ document.querySelectorAll('#pedidosTabs button').forEach(button => {
             }
         });
     });
+});
+
+// Iniciar auto-refresh automáticamente al cargar la página
+document.addEventListener('DOMContentLoaded', function() {
+    // Iniciar auto-refresh automáticamente
+    toggleAutoRefresh();
 });
 </script>
 {% endblock %}

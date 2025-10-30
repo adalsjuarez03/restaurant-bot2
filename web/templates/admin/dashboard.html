@@ -4,8 +4,23 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
+<!-- Controles de Auto-Refresh -->
+<div class="row mb-3">
+    <div class="col-md-12 text-end">
+        <button class="btn btn-sm btn-outline-success" id="btnAutoRefresh" onclick="toggleAutoRefresh()">
+            <i class="bi bi-play-fill"></i> Activar Auto-Refresh
+        </button>
+        <button class="btn btn-sm btn-outline-primary" onclick="cargarDashboard()">
+            <i class="bi bi-arrow-clockwise"></i> Actualizar
+        </button>
+        <small class="text-muted ms-3" id="lastUpdate">
+            <i class="bi bi-clock"></i> --:--:--
+        </small>
+    </div>
+</div>
+
 <!-- Estadísticas Cards -->
-<div class="row g-4 mb-4">
+<div class="row g-4 mb-4" id="statsCards">
     <div class="col-md-3">
         <div class="stat-card">
             <div class="stat-icon primary">
@@ -13,7 +28,7 @@
             </div>
             <h6 class="text-muted mb-1">Pedidos Hoy</h6>
             <h2 class="mb-0">{{ stats.pedidos_hoy }}</h2>
-            <small class="text-success"><i class="bi bi-arrow-up"></i> +12% vs ayer</small>
+            <small class="text-success"><i class="bi bi-arrow-up"></i> Actualizando...</small>
         </div>
     </div>
     
@@ -24,7 +39,7 @@
             </div>
             <h6 class="text-muted mb-1">Ingresos Hoy</h6>
             <h2 class="mb-0">${{ "%.2f"|format(stats.total_hoy) }}</h2>
-            <small class="text-success"><i class="bi bi-arrow-up"></i> +8% vs ayer</small>
+            <small class="text-success"><i class="bi bi-arrow-up"></i> Actualizando...</small>
         </div>
     </div>
     
@@ -75,7 +90,7 @@
                                 <th>Acciones</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="pedidosTableBody">
                             {% for pedido in pedidos %}
                             <tr>
                                 <td><strong>#{{ pedido.numero_pedido[:10] }}</strong></td>
@@ -97,6 +112,8 @@
                                         <span class="badge bg-info">Confirmado</span>
                                     {% elif pedido.estado == 'preparando' %}
                                         <span class="badge bg-primary">Preparando</span>
+                                    {% elif pedido.estado == 'pagado' %}
+                                        <span class="badge bg-success">Pagado</span>
                                     {% elif pedido.estado == 'entregado' %}
                                         <span class="badge bg-success">Entregado</span>
                                     {% else %}
@@ -133,7 +150,7 @@
                 </h5>
                 <a href="{{ url_for('reservaciones') }}" class="btn btn-sm btn-primary">Ver todas</a>
             </div>
-            <div class="card-body">
+            <div class="card-body" id="reservacionesContainer">
                 {% for reservacion in reservaciones %}
                 <div class="d-flex align-items-center mb-3 pb-3 border-bottom">
                     <div class="flex-shrink-0">
@@ -188,9 +205,244 @@
 
 {% block extra_js %}
 <script>
-    // Auto-refresh cada 30 segundos
-    setTimeout(() => {
-        location.reload();
-    }, 30000);
+// ============= AUTO-REFRESH DEL DASHBOARD =============
+let autoRefreshInterval = null;
+let lastUpdateTime = new Date();
+
+// Función para cargar datos del dashboard
+async function cargarDashboard() {
+    try {
+        const response = await fetch('/api/dashboard/datos');
+        const data = await response.json();
+        
+        if (data.success) {
+            // Actualizar estadísticas
+            actualizarEstadisticas(data.stats);
+            
+            // Actualizar tabla de pedidos
+            actualizarTablaPedidos(data.pedidos);
+            
+            // Actualizar reservaciones
+            actualizarReservaciones(data.reservaciones);
+            
+            // Actualizar hora
+            lastUpdateTime = new Date();
+            document.getElementById('lastUpdate').innerHTML = 
+                `<i class="bi bi-clock"></i> ${lastUpdateTime.toLocaleTimeString()}`;
+        }
+    } catch (error) {
+        console.error('Error cargando dashboard:', error);
+    }
+}
+
+// Actualizar estadísticas
+function actualizarEstadisticas(stats) {
+    const statsContainer = document.getElementById('statsCards');
+    statsContainer.innerHTML = `
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon primary">
+                    <i class="bi bi-bag-check"></i>
+                </div>
+                <h6 class="text-muted mb-1">Pedidos Hoy</h6>
+                <h2 class="mb-0">${stats.pedidos_hoy}</h2>
+                <small class="text-success"><i class="bi bi-check-circle"></i> Actualizado</small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon success">
+                    <i class="bi bi-currency-dollar"></i>
+                </div>
+                <h6 class="text-muted mb-1">Ingresos Hoy</h6>
+                <h2 class="mb-0">$${parseFloat(stats.total_hoy).toFixed(2)}</h2>
+                <small class="text-success"><i class="bi bi-check-circle"></i> Actualizado</small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon warning">
+                    <i class="bi bi-calendar-check"></i>
+                </div>
+                <h6 class="text-muted mb-1">Reservaciones</h6>
+                <h2 class="mb-0">${stats.reservaciones_hoy}</h2>
+                <small class="text-info"><i class="bi bi-calendar"></i> Para hoy</small>
+            </div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon info">
+                    <i class="bi bi-people"></i>
+                </div>
+                <h6 class="text-muted mb-1">Clientes</h6>
+                <h2 class="mb-0">156</h2>
+                <small class="text-success"><i class="bi bi-arrow-up"></i> +5 nuevos</small>
+            </div>
+        </div>
+    `;
+}
+
+// Actualizar tabla de pedidos
+function actualizarTablaPedidos(pedidos) {
+    const tbody = document.getElementById('pedidosTableBody');
+    
+    if (!pedidos || pedidos.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center py-4 text-muted">
+                    <i class="bi bi-inbox" style="font-size: 48px;"></i>
+                    <p class="mt-2">No hay pedidos recientes</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    let html = '';
+    pedidos.forEach(pedido => {
+        // Tipo de pedido
+        let tipoHtml = '';
+        if (pedido.tipo_pedido === 'delivery') {
+            tipoHtml = '<i class="bi bi-truck text-primary"></i> Delivery';
+        } else if (pedido.tipo_pedido === 'takeaway') {
+            tipoHtml = '<i class="bi bi-bag text-warning"></i> Llevar';
+        } else {
+            tipoHtml = '<i class="bi bi-shop text-success"></i> Local';
+        }
+        
+        // Estado
+        let estadoBadge = '';
+        switch(pedido.estado) {
+            case 'pendiente':
+                estadoBadge = '<span class="badge bg-warning">Pendiente</span>';
+                break;
+            case 'confirmado':
+                estadoBadge = '<span class="badge bg-info">Confirmado</span>';
+                break;
+            case 'preparando':
+                estadoBadge = '<span class="badge bg-primary">Preparando</span>';
+                break;
+            case 'pagado':
+                estadoBadge = '<span class="badge bg-success">Pagado</span>';
+                break;
+            case 'entregado':
+                estadoBadge = '<span class="badge bg-success">Entregado</span>';
+                break;
+            default:
+                estadoBadge = `<span class="badge bg-secondary">${pedido.estado}</span>`;
+        }
+        
+        // Hora
+        const fecha = new Date(pedido.fecha_pedido);
+        const hora = fecha.toLocaleTimeString('es-MX', {hour: '2-digit', minute: '2-digit'});
+        
+        html += `
+            <tr>
+                <td><strong>#${pedido.numero_pedido.substring(0, 10)}</strong></td>
+                <td>${pedido.nombre_cliente || 'Sin nombre'}</td>
+                <td>${tipoHtml}</td>
+                <td><strong>$${parseFloat(pedido.total).toFixed(2)}</strong></td>
+                <td>${estadoBadge}</td>
+                <td>${hora}</td>
+                <td>
+                    <a href="/pedidos/${pedido.id}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-eye"></i>
+                    </a>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+}
+
+// Actualizar reservaciones
+function actualizarReservaciones(reservaciones) {
+    const container = document.getElementById('reservacionesContainer');
+    
+    if (!reservaciones || reservaciones.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-4 text-muted">
+                <i class="bi bi-calendar-x" style="font-size: 48px;"></i>
+                <p class="mt-2">No hay reservaciones</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    reservaciones.forEach(reservacion => {
+        // Estado
+        let estadoBadge = '';
+        if (reservacion.estado === 'confirmada') {
+            estadoBadge = '<span class="badge bg-success">Confirmada</span>';
+        } else if (reservacion.estado === 'pendiente') {
+            estadoBadge = '<span class="badge bg-warning">Pendiente</span>';
+        } else {
+            estadoBadge = `<span class="badge bg-secondary">${reservacion.estado}</span>`;
+        }
+        
+        // Formatear hora
+        let hora = 'N/A';
+        if (reservacion.hora_reservacion) {
+            if (typeof reservacion.hora_reservacion === 'string') {
+                hora = reservacion.hora_reservacion.substring(0, 5);
+            }
+        }
+        
+        html += `
+            <div class="d-flex align-items-center mb-3 pb-3 border-bottom">
+                <div class="flex-shrink-0">
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-3">
+                        <i class="bi bi-person-circle text-primary" style="font-size: 24px;"></i>
+                    </div>
+                </div>
+                <div class="flex-grow-1 ms-3">
+                    <h6 class="mb-1">${reservacion.nombre_cliente}</h6>
+                    <small class="text-muted">
+                        <i class="bi bi-clock"></i> ${hora}
+                        <i class="bi bi-people ms-2"></i> ${reservacion.numero_personas} personas
+                    </small>
+                    <div class="mt-1">
+                        ${estadoBadge}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Toggle auto-refresh
+function toggleAutoRefresh() {
+    const btn = document.getElementById('btnAutoRefresh');
+    
+    if (autoRefreshInterval) {
+        // Detener
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        btn.innerHTML = '<i class="bi bi-play-fill"></i> Activar Auto-Refresh';
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-outline-success');
+    } else {
+        // Iniciar
+        autoRefreshInterval = setInterval(cargarDashboard, 5000); // Cada 5 segundos
+        btn.innerHTML = '<i class="bi bi-pause-fill"></i> Auto-Refresh Activo';
+        btn.classList.remove('btn-outline-success');
+        btn.classList.add('btn-success');
+        
+        // Cargar inmediatamente
+        cargarDashboard();
+    }
+}
+
+// Iniciar auto-refresh automáticamente
+document.addEventListener('DOMContentLoaded', function() {
+    toggleAutoRefresh();
+});
 </script>
 {% endblock %}

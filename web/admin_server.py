@@ -1097,6 +1097,79 @@ def api_stats():
         'stats': stats
     })
 
+@app.route('/api/pedidos/recientes')
+@login_required
+def api_pedidos_recientes():
+    """API: Obtener pedidos recientes para actualización automática"""
+    try:
+        user = get_current_user()
+        restaurante_id = user['restaurante_id']
+        
+        pedidos = db.get_pedidos_restaurante(restaurante_id, limit=50)
+        
+        # Convertir datetime a string para JSON
+        for pedido in pedidos:
+            if pedido.get('fecha_pedido'):
+                pedido['fecha_pedido'] = pedido['fecha_pedido'].isoformat()
+        
+        return jsonify({
+            'success': True,
+            'pedidos': pedidos
+        })
+    except Exception as e:
+        print(f"❌ Error obteniendo pedidos: {e}")
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+    
+@app.route('/api/dashboard/datos')
+@login_required
+def api_dashboard_datos():
+    """API: Obtener datos del dashboard para actualización automática"""
+    try:
+        user = get_current_user()
+        restaurante_id = user['restaurante_id']
+        
+        # Obtener estadísticas
+        stats = db.get_estadisticas_hoy(restaurante_id)
+        
+        # Pedidos recientes
+        pedidos = db.get_pedidos_restaurante(restaurante_id, limit=10)
+        
+        # Convertir datetime a string
+        for pedido in pedidos:
+            if pedido.get('fecha_pedido'):
+                pedido['fecha_pedido'] = pedido['fecha_pedido'].isoformat()
+        
+        # Reservaciones recientes
+        reservaciones = db.get_reservaciones_restaurante(restaurante_id, limit=10)
+        
+        # Convertir hora_reservacion (timedelta) a string
+        from datetime import timedelta
+        for reservacion in reservaciones:
+            if reservacion.get('hora_reservacion'):
+                if isinstance(reservacion['hora_reservacion'], timedelta):
+                    td = reservacion['hora_reservacion']
+                    total_seconds = int(td.total_seconds())
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    reservacion['hora_reservacion'] = f"{hours:02d}:{minutes:02d}"
+        
+        return jsonify({
+            'success': True,
+            'stats': stats,
+            'pedidos': pedidos,
+            'reservaciones': reservaciones
+        })
+    except Exception as e:
+        print(f"❌ Error obteniendo datos dashboard: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
 # ==================== MANEJADORES DE ERRORES ====================
 
 @app.errorhandler(404)
