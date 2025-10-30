@@ -61,8 +61,13 @@ DEBUG INFO:
                         </div>
                         <div class="col-md-4">
                             <div class="p-3 bg-light rounded">
-                                <i class="bi bi-{{ 'cash' if pedido.metodo_pago == 'efectivo' else 'credit-card' }} text-success" style="font-size: 32px;"></i>
-                                <h6 class="mt-2 mb-0">{{ pedido.metodo_pago|title or 'Efectivo' }}</h6>
+                                {% if pedido.transaction_id %}
+                                    <i class="bi bi-credit-card-2-front text-primary" style="font-size: 32px;"></i>
+                                    <h6 class="mt-2 mb-0">PayPal</h6>
+                                {% else %}
+                                    <i class="bi bi-{{ 'cash' if pedido.metodo_pago == 'efectivo' else 'credit-card' }} text-success" style="font-size: 32px;"></i>
+                                    <h6 class="mt-2 mb-0">{{ pedido.metodo_pago|title or 'Efectivo' }}</h6>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="col-md-4">
@@ -94,28 +99,41 @@ DEBUG INFO:
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for item in detalle %}
-                                <tr>
-                                    <td>
-                                        <div>
-                                            <strong>{{ item.nombre }}</strong>
-                                            {% if item.notas_item %}
-                                            <br>
-                                            <small class="text-muted">
-                                                <i class="bi bi-chat-left-text"></i> {{ item.notas_item }}
-                                            </small>
-                                            {% endif %}
-                                        </div>
-                                    </td>
-                                    <td class="text-center">
-                                        <span class="badge bg-secondary">{{ item.cantidad }}</span>
-                                    </td>
-                                    <td class="text-end">${{ "%.2f"|format(item.precio_unitario) }}</td>
-                                    <td class="text-end">
-                                        <strong>${{ "%.2f"|format(item.subtotal) }}</strong>
-                                    </td>
-                                </tr>
-                                {% endfor %}
+                                {% if detalle and detalle|length > 0 %}
+                                    {% for item in detalle %}
+                                    <tr>
+                                        <td>
+                                            <div>
+                                                <strong>{{ item.item_nombre or item.nombre or 'Producto' }}</strong>
+                                                {% if item.item_codigo %}
+                                                <br>
+                                                <small class="text-muted">Código: {{ item.item_codigo }}</small>
+                                                {% endif %}
+                                                {% if item.notas_item %}
+                                                <br>
+                                                <small class="text-muted">
+                                                    <i class="bi bi-chat-left-text"></i> {{ item.notas_item }}
+                                                </small>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge bg-secondary">{{ item.cantidad }}</span>
+                                        </td>
+                                        <td class="text-end">${{ "%.2f"|format(item.precio_unitario) }}</td>
+                                        <td class="text-end">
+                                            <strong>${{ "%.2f"|format(item.subtotal) }}</strong>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted py-4">
+                                            <i class="bi bi-exclamation-circle"></i>
+                                            No hay productos en este pedido
+                                        </td>
+                                    </tr>
+                                {% endif %}
                             </tbody>
                             <tfoot class="table-light">
                                 <tr>
@@ -207,14 +225,35 @@ DEBUG INFO:
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <span class="text-muted">Estado:</span>
-                        <span class="badge bg-{{ 'success' if pedido.estado_pago == 'pagado' else 'warning' }}">
-                            {{ pedido.estado_pago|title or 'Pendiente' }}
-                        </span>
+                        {% if pedido.transaction_id or pedido.estado == 'pagado' %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle-fill"></i> PAGADO
+                            </span>
+                        {% else %}
+                            <span class="badge bg-warning">
+                                <i class="bi bi-clock-history"></i> Pendiente
+                            </span>
+                        {% endif %}
                     </div>
                     <div class="d-flex justify-content-between align-items-center">
                         <span class="text-muted">Método:</span>
-                        <strong>{{ pedido.metodo_pago|title or 'Efectivo' }}</strong>
+                        <strong>
+                            {% if pedido.transaction_id %}
+                                <i class="bi bi-credit-card-2-front text-primary"></i> PayPal
+                            {% elif pedido.metodo_pago %}
+                                {{ pedido.metodo_pago|title }}
+                            {% else %}
+                                Efectivo
+                            {% endif %}
+                        </strong>
                     </div>
+                    {% if pedido.transaction_id %}
+                    <div class="mt-2 p-2 bg-light rounded">
+                        <small class="text-muted">ID Transacción:</small>
+                        <br>
+                        <code style="font-size: 10px;">{{ pedido.transaction_id }}</code>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -290,19 +329,28 @@ DEBUG INFO:
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in detalle %}
-                    <tr>
-                        <td class="text-center">{{ item.cantidad }}</td>
-                        <td>
-                            {{ item.nombre }}
-                            {% if item.notas_item %}
-                            <br><small>→ {{ item.notas_item }}</small>
-                            {% endif %}
-                        </td>
-                        <td class="text-right">${{ "%.2f"|format(item.precio_unitario) }}</td>
-                        <td class="text-right"><strong>${{ "%.2f"|format(item.subtotal) }}</strong></td>
-                    </tr>
-                    {% endfor %}
+                    {% if detalle and detalle|length > 0 %}
+                        {% for item in detalle %}
+                        <tr>
+                            <td class="text-center">{{ item.cantidad }}</td>
+                            <td>
+                                {{ item.item_nombre or item.nombre or 'Producto' }}
+                                {% if item.item_codigo %}
+                                <br><small>Cód: {{ item.item_codigo }}</small>
+                                {% endif %}
+                                {% if item.notas_item %}
+                                <br><small>→ {{ item.notas_item }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-right">${{ "%.2f"|format(item.precio_unitario) }}</td>
+                            <td class="text-right"><strong>${{ "%.2f"|format(item.subtotal) }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center">Sin productos</td>
+                        </tr>
+                    {% endif %}
                 </tbody>
             </table>
             <div class="separator"></div>
@@ -340,12 +388,32 @@ DEBUG INFO:
             <div class="payment-info">
                 <div class="info-row">
                     <span class="label">Método de Pago:</span>
-                    <span class="value">{{ pedido.metodo_pago|upper or 'EFECTIVO' }}</span>
+                    <span class="value">
+                        {% if pedido.transaction_id %}
+                            PAYPAL
+                        {% elif pedido.metodo_pago %}
+                            {{ pedido.metodo_pago|upper }}
+                        {% else %}
+                            EFECTIVO
+                        {% endif %}
+                    </span>
                 </div>
                 <div class="info-row">
                     <span class="label">Estado Pago:</span>
-                    <span class="value">{{ pedido.estado_pago|upper or 'PENDIENTE' }}</span>
+                    <span class="value">
+                        {% if pedido.transaction_id or pedido.estado == 'pagado' %}
+                            PAGADO
+                        {% else %}
+                            PENDIENTE
+                        {% endif %}
+                    </span>
                 </div>
+                {% if pedido.transaction_id %}
+                <div class="info-row">
+                    <span class="label">ID Trans.:</span>
+                    <span class="value" style="font-size: 8pt;">{{ pedido.transaction_id[:20] }}...</span>
+                </div>
+                {% endif %}
             </div>
         </div>
 

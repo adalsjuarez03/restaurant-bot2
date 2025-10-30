@@ -787,14 +787,18 @@ class DatabaseManager:
     
     @staticmethod
     def get_detalle_pedido(pedido_id):
-        """Obtener detalles (items) de un pedido"""
+        """Obtener detalles (items) de un pedido CON NOMBRES"""
         try:
             with get_db_cursor() as (cursor, conn):
                 cursor.execute("""
-                    SELECT dp.*, i.nombre as item_nombre
+                    SELECT 
+                        dp.*,
+                        i.nombre as item_nombre,
+                        i.codigo as item_codigo
                     FROM detalle_pedidos dp
                     INNER JOIN items_menu i ON dp.item_id = i.id
                     WHERE dp.pedido_id = %s
+                    ORDER BY dp.id
                 """, (pedido_id,))
                 return cursor.fetchall()
         except Error as e:
