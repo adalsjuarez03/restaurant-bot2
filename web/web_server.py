@@ -1427,8 +1427,8 @@ def payment_success(slug):
         if not session_id or not payment_id or not payer_id:
             return "<h1>❌ Datos de pago incompletos</h1>", 400
         
-        session = chat_sessions.get(session_id)
-        if not session:
+        session_obj = chat_sessions.get(session_id)
+        if not session_obj:
             return "<h1>❌ Sesión no encontrada</h1>", 404
         
         # Ejecutar el pago
@@ -1444,31 +1444,65 @@ def payment_success(slug):
                         transaction_id = %s,
                         fecha_pago = NOW()
                     WHERE id = %s
-                """, (resultado['transaction_id'], session.pedido_id))
+                """, (resultado['transaction_id'], session_obj.pedido_id))
                 conn.commit()
             
             # Obtener datos del pedido para la notificación
-            pedido = db.get_pedido(session.pedido_id)
+            pedido = db.get_pedido(session_obj.pedido_id)
             
-            # Notificar a Telegram - USANDO EL NUEVO TIPO DE NOTIFICACIÓN
+            # Notificar a Telegram
             send_notification_to_group("payment_confirmed", {
                 'numero_pedido': pedido['numero_pedido'],
                 'transaction_id': resultado['transaction_id'],
                 'total': pedido['total']
-            }, session)
+            }, session_obj)
+            
+            # ==================== NUEVO: ENVIAR MENSAJE AL CHAT ====================
+            # Obtener tiempo estimado dinámicamente
+            delivery_config = obtener_info_delivery(session_obj.restaurante_id)
+            tiempo_estimado = delivery_config.get('tiempo_entrega', '30-45 minutos') if delivery_config else '30-45 minutos'
+            
+            mensaje_confirmacion = f"""✅ ¡PAGO CONFIRMADO!
+
+🎫 Pedido: #{pedido['numero_pedido']}
+💳 Transacción: {resultado['transaction_id']}
+💰 Total pagado: ${pedido['total']}
+
+📦 ESTADO DE TU PEDIDO:
+🟢 Pago recibido
+⏳ En preparación
+
+📱 Te notificaremos por teléfono cuando:
+- Tu pedido esté listo
+- El repartidor esté en camino
+- Llegue a tu dirección
+
+📍 Dirección de entrega:
+{session_obj.customer_address}
+
+⏱ Tiempo estimado: {tiempo_estimado}
+
+¡Gracias por tu compra! 🍽️"""
+
+            session_obj.add_message(mensaje_confirmacion, is_user=False)
+            
+            # ==================== NUEVO: LIMPIAR SESIÓN ====================
+            session_obj.cart = []
+            session_obj.pedido_id = None
+            session_obj.payment_id = None
             
             # Generar factura (opcional)
             cliente_data = {
-                'nombre': session.customer_name,
-                'email': session.customer_email or '',
-                'telefono': session.customer_phone,
-                'direccion': session.customer_address,
+                'nombre': session_obj.customer_name,
+                'email': session_obj.customer_email or '',
+                'telefono': session_obj.customer_phone,
+                'direccion': session_obj.customer_address,
                 'ciudad': '',
                 'estado': '',
                 'codigo_postal': ''
             }
             
-            detalles = db.get_detalle_pedido(session.pedido_id)
+            detalles = db.get_detalle_pedido(session_obj.pedido_id)
             items_list = []
             for detalle in detalles:
                 items_list.append({
@@ -1494,7 +1528,9 @@ def payment_success(slug):
             return render_template('public/payment_success.html', 
                                  transaction_id=resultado['transaction_id'],
                                  pedido_numero=pedido['numero_pedido'],
-                                 total=pedido['total'])
+                                 total=pedido['total'],
+                                 slug=slug,
+                                 session_id=session_id)
         else:
             return f"<h1>❌ Error procesando pago</h1><p>{resultado.get('error')}</p>", 500
             

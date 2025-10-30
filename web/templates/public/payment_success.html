@@ -143,13 +143,22 @@
             cursor: pointer;
             text-decoration: none;
             display: inline-block;
-            margin-top: 20px;
+            margin: 10px 5px;
             transition: transform 0.2s, box-shadow 0.2s;
         }
         
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        /* ✅ NUEVO: Estilo para botón de chat */
+        .btn-chat {
+            background: #8B4513;
+        }
+        
+        .btn-chat:hover {
+            box-shadow: 0 10px 25px rgba(139, 69, 19, 0.4);
         }
         
         .message {
@@ -176,6 +185,12 @@
             .success-icon svg {
                 width: 40px;
                 height: 40px;
+            }
+            
+            .btn {
+                display: block;
+                width: 100%;
+                margin: 10px 0;
             }
         }
     </style>
@@ -214,6 +229,11 @@
             📱 Te contactaremos pronto para coordinar la entrega<br>
             🍽️ Prepararemos tu pedido con mucho cariño
         </p>
+        
+        <!-- ✅ NUEVO: Botón para volver al chat -->
+        <a href="/{{ slug }}/?session={{ session_id }}" class="btn btn-chat">
+            💬 Volver al Chat
+        </a>
         
         <a href="javascript:window.close()" class="btn">Cerrar Ventana</a>
     </div>
