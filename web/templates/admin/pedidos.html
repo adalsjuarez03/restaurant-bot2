@@ -32,161 +32,160 @@
     </div>
 </div>
 
-<!-- Tabs por tipo de pedido -->
-<ul class="nav nav-tabs mb-4" id="pedidosTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="todos-tab" data-bs-toggle="tab" data-bs-target="#todos" type="button">
-            <i class="bi bi-grid-3x3"></i> Todos
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="delivery-tab" data-bs-toggle="tab" data-bs-target="#delivery" type="button">
-            <i class="bi bi-truck"></i> Delivery
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="takeaway-tab" data-bs-toggle="tab" data-bs-target="#takeaway" type="button">
-            <i class="bi bi-bag"></i> Para llevar
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="restaurant-tab" data-bs-toggle="tab" data-bs-target="#restaurant" type="button">
-            <i class="bi bi-shop"></i> En local
-        </button>
-    </li>
-</ul>
+<!-- Filtros por tipo de pedido (botones en lugar de tabs) -->
+<div class="btn-group mb-4" role="group" id="filtrosTipoPedido">
+    <input type="radio" class="btn-check" name="filtroTipo" id="filtro-todos" value="todos" checked autocomplete="off">
+    <label class="btn btn-outline-primary" for="filtro-todos">
+        <i class="bi bi-grid-3x3"></i> Todos
+    </label>
 
-<!-- Contenido de Tabs -->
-<div class="tab-content" id="pedidosTabContent">
-    <div class="tab-pane fade show active" id="todos">
-        <div class="card">
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0 align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Pedido</th>
-                                <th>Cliente</th>
-                                <th>Tipo</th>
-                                <th>Productos</th>
-                                <th>Total</th>
-                                <th>Estado</th>
-                                <th>Fecha/Hora</th>
-                                <th>Ver</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for pedido in pedidos %}
-                            <tr class="pedido-row" data-tipo="{{ pedido.tipo_pedido }}" data-id="{{ pedido.id }}">
-                                <td>
-                                    <strong class="text-primary">#{{ pedido.numero_pedido[:10] }}</strong>
-                                    <br>
-                                    <small class="text-muted">
-                                        <i class="bi bi-{{ 'telegram' if pedido.origen == 'telegram' else 'globe' }}"></i>
-                                        {{ pedido.origen|title }}
-                                    </small>
-                                </td>
-                                <td>
-                                    <div>
-                                        <strong>{{ pedido.nombre_cliente or 'Sin nombre' }}</strong>
-                                        <br>
-                                        <small class="text-muted">
-                                            <i class="bi bi-telephone"></i> {{ pedido.telefono_contacto or 'N/A' }}
-                                        </small>
-                                    </div>
-                                </td>
-                                <td>
-                                    {% if pedido.tipo_pedido == 'delivery' %}
-                                        <span class="badge bg-primary">
-                                            <i class="bi bi-truck"></i> Delivery
-                                        </span>
-                                    {% elif pedido.tipo_pedido == 'takeaway' %}
-                                        <span class="badge bg-warning">
-                                            <i class="bi bi-bag"></i> Llevar
-                                        </span>
-                                    {% else %}
-                                        <span class="badge bg-success">
-                                            <i class="bi bi-shop"></i> Local
-                                        </span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <small class="text-muted">
-                                        {{ pedido.total_items or 0 }} producto(s)
-                                    </small>
-                                </td>
-                                <td>
-                                    <strong class="text-success">${{ "%.2f"|format(pedido.total) }}</strong>
-                                    <br>
-                                    <small class="text-muted">
-                                        {% if pedido.transaction_id %}
-                                            <i class="bi bi-credit-card-2-front"></i> PayPal
-                                        {% elif pedido.metodo_pago %}
-                                            <i class="bi bi-{{ 'cash' if pedido.metodo_pago == 'efectivo' else 'credit-card' }}"></i>
-                                            {{ pedido.metodo_pago|title }}
-                                        {% else %}
-                                            <i class="bi bi-cash"></i> Efectivo
-                                        {% endif %}
-                                    </small>
-                                </td>
-                                <td>
-                                    {% if pedido.estado == 'pendiente' %}
-                                        <span class="badge bg-warning text-dark">
-                                            <i class="bi bi-clock-history"></i> Pendiente
-                                        </span>
-                                    {% elif pedido.estado == 'confirmado' %}
-                                        <span class="badge bg-info">
-                                            <i class="bi bi-check-circle"></i> Confirmado
-                                        </span>
-                                    {% elif pedido.estado == 'preparando' %}
-                                        <span class="badge bg-primary">
-                                            <i class="bi bi-fire"></i> Preparando
-                                        </span>
-                                    {% elif pedido.estado == 'listo' %}
-                                        <span class="badge bg-success">
-                                            <i class="bi bi-check-all"></i> Listo
-                                        </span>
-                                    {% elif pedido.estado == 'en_camino' %}
-                                        <span class="badge bg-info">
-                                            <i class="bi bi-truck"></i> En camino
-                                        </span>
-                                    {% elif pedido.estado == 'entregado' %}
-                                        <span class="badge bg-success">
-                                            <i class="bi bi-check-circle-fill"></i> Entregado
-                                        </span>
-                                    {% elif pedido.estado == 'cancelado' %}
-                                        <span class="badge bg-danger">
-                                            <i class="bi bi-x-circle"></i> Cancelado
-                                        </span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <small>
-                                        {{ pedido.fecha_pedido.strftime('%d/%m/%Y') }}<br>
-                                        {{ pedido.fecha_pedido.strftime('%H:%M') }}
-                                    </small>
-                                </td>
-                                <td>
-                                    <a href="{{ url_for('ver_pedido', pedido_id=pedido.id) }}" 
-                                       class="btn btn-sm btn-outline-primary" 
-                                       title="Ver detalle">
-                                        <i class="bi bi-eye"></i> Ver
-                                    </a>
-                                </td>
-                            </tr>
+    <input type="radio" class="btn-check" name="filtroTipo" id="filtro-delivery" value="delivery" autocomplete="off">
+    <label class="btn btn-outline-primary" for="filtro-delivery">
+        <i class="bi bi-truck"></i> Delivery
+    </label>
+
+    <input type="radio" class="btn-check" name="filtroTipo" id="filtro-takeaway" value="takeaway" autocomplete="off">
+    <label class="btn btn-outline-primary" for="filtro-takeaway">
+        <i class="bi bi-bag"></i> Para llevar
+    </label>
+
+    <input type="radio" class="btn-check" name="filtroTipo" id="filtro-restaurant" value="restaurant" autocomplete="off">
+    <label class="btn btn-outline-primary" for="filtro-restaurant">
+        <i class="bi bi-shop"></i> En local
+    </label>
+</div>
+
+<!-- Tabla única de pedidos -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Pedido</th>
+                        <th>Cliente</th>
+                        <th>Tipo</th>
+                        <th>Productos</th>
+                        <th>Total</th>
+                        <th>Estado</th>
+                        <th>Fecha/Hora</th>
+                        <th>Ver</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pedido in pedidos %}
+                    <tr class="pedido-row" data-tipo="{{ pedido.tipo_pedido }}" data-id="{{ pedido.id }}">
+                        <td>
+                            <strong class="text-primary">#{{ pedido.numero_pedido[:10] }}</strong>
+                            <br>
+                            <small class="text-muted">
+                                <i class="bi bi-{{ 'telegram' if pedido.origen == 'telegram' else 'globe' }}"></i>
+                                {{ pedido.origen|title }}
+                            </small>
+                        </td>
+                        <td>
+                            <div>
+                                <strong>{{ pedido.nombre_cliente or 'Sin nombre' }}</strong>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="bi bi-telephone"></i> {{ pedido.telefono_contacto or 'N/A' }}
+                                </small>
+                            </div>
+                        </td>
+                        <td>
+                            {% if pedido.tipo_pedido == 'delivery' %}
+                                <span class="badge bg-primary">
+                                    <i class="bi bi-truck"></i> Delivery
+                                </span>
+                            {% elif pedido.tipo_pedido == 'takeaway' %}
+                                <span class="badge bg-warning">
+                                    <i class="bi bi-bag"></i> Llevar
+                                </span>
                             {% else %}
-                            <tr>
-                                <td colspan="8" class="text-center py-5 text-muted">
-                                    <i class="bi bi-inbox" style="font-size: 64px;"></i>
-                                    <p class="mt-3 mb-0">No hay pedidos para mostrar</p>
-                                    <small>Los pedidos aparecerán aquí cuando los clientes hagan sus órdenes</small>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                                <span class="badge bg-success">
+                                    <i class="bi bi-shop"></i> Local
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="text-muted">
+                                {{ pedido.total_items or 0 }} producto(s)
+                            </small>
+                        </td>
+                        <td>
+                            <strong class="text-success">${{ "%.2f"|format(pedido.total) }}</strong>
+                            <br>
+                            <small class="text-muted">
+                                {% if pedido.transaction_id %}
+                                    <i class="bi bi-credit-card-2-front"></i> PayPal
+                                {% elif pedido.metodo_pago %}
+                                    <i class="bi bi-{{ 'cash' if pedido.metodo_pago == 'efectivo' else 'credit-card' }}"></i>
+                                    {{ pedido.metodo_pago|title }}
+                                {% else %}
+                                    <i class="bi bi-cash"></i> Efectivo
+                                {% endif %}
+                            </small>
+                        </td>
+                        <td>
+                            {% if pedido.estado == 'pendiente' %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-clock-history"></i> Pendiente
+                                </span>
+                            {% elif pedido.estado == 'confirmado' %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-check-circle"></i> Confirmado
+                                </span>
+                            {% elif pedido.estado == 'preparando' %}
+                                <span class="badge bg-primary">
+                                    <i class="bi bi-fire"></i> Preparando
+                                </span>
+                            {% elif pedido.estado == 'listo' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-all"></i> Listo
+                                </span>
+                            {% elif pedido.estado == 'en_camino' %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-truck"></i> En camino
+                                </span>
+                            {% elif pedido.estado == 'entregado' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle-fill"></i> Entregado
+                                </span>
+                            {% elif pedido.estado == 'pagado' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle-fill"></i> Pagado
+                                </span>
+                            {% elif pedido.estado == 'cancelado' %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-x-circle"></i> Cancelado
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small>
+                                {{ pedido.fecha_pedido.strftime('%d/%m/%Y') }}<br>
+                                {{ pedido.fecha_pedido.strftime('%H:%M') }}
+                            </small>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('ver_pedido', pedido_id=pedido.id) }}" 
+                               class="btn btn-sm btn-outline-primary" 
+                               title="Ver detalle">
+                                <i class="bi bi-eye"></i> Ver
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox" style="font-size: 64px;"></i>
+                            <p class="mt-3 mb-0">No hay pedidos para mostrar</p>
+                            <small>Los pedidos aparecerán aquí cuando los clientes hagan sus órdenes</small>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -210,6 +209,10 @@ async function cargarPedidos() {
             lastUpdateTime = new Date();
             document.getElementById('lastUpdate').innerHTML = 
                 `<i class="bi bi-clock"></i> Última actualización: ${lastUpdateTime.toLocaleTimeString()}`;
+            
+            // Re-aplicar filtro activo después de actualizar
+            const filtroActivo = document.querySelector('input[name="filtroTipo"]:checked').value;
+            filtrarPorTipo(filtroActivo);
         }
     } catch (error) {
         console.error('Error cargando pedidos:', error);
@@ -275,7 +278,7 @@ function generarFilaPedido(pedido) {
         case 'entregado':
             estadoBadge = '<span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Entregado</span>';
             break;
-        case 'pagado':  // ✅ AGREGAR ESTE CASO
+        case 'pagado':
             estadoBadge = '<span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Pagado</span>';
             break;
         case 'cancelado':
@@ -380,38 +383,58 @@ function toggleAutoRefresh() {
     }
 }
 
-// ============= BÚSQUEDA Y FILTROS =============
+// ============= FILTRADO POR TIPO DE PEDIDO =============
 
-// Búsqueda en tiempo real
-document.getElementById('searchPedidos').addEventListener('keyup', function(e) {
-    const searchTerm = e.target.value.toLowerCase();
+// Función para filtrar pedidos por tipo
+function filtrarPorTipo(tipo) {
     const rows = document.querySelectorAll('.pedido-row');
+    let visibles = 0;
     
     rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(searchTerm) ? '' : 'none';
+        const tipoPedido = row.dataset.tipo;
+        
+        if (tipo === 'todos') {
+            row.style.display = '';
+            visibles++;
+        } else if (tipoPedido === tipo) {
+            row.style.display = '';
+            visibles++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    console.log(`✅ Filtro aplicado: ${tipo}, Pedidos visibles: ${visibles}`);
+}
+
+// Event listeners para los botones de filtro
+document.querySelectorAll('input[name="filtroTipo"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const tipo = this.value;
+        filtrarPorTipo(tipo);
+        
+        // Limpiar búsqueda al cambiar filtro
+        document.getElementById('searchPedidos').value = '';
     });
 });
 
-// Filtrar por tabs (tipo de pedido)
-document.querySelectorAll('#pedidosTabs button').forEach(button => {
-    button.addEventListener('click', function() {
-        const tipo = this.id.replace('-tab', '');
-        const rows = document.querySelectorAll('.pedido-row');
+// ============= BÚSQUEDA Y FILTROS =============
+
+// Búsqueda en tiempo real - RESPETA EL FILTRO ACTIVO
+document.getElementById('searchPedidos').addEventListener('keyup', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    const rows = document.querySelectorAll('.pedido-row');
+    const filtroActivo = document.querySelector('input[name="filtroTipo"]:checked').value;
+    
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        const tipoPedido = row.dataset.tipo;
         
-        rows.forEach(row => {
-            if (tipo === 'todos') {
-                row.style.display = '';
-            } else if (tipo === 'delivery' && row.dataset.tipo === 'delivery') {
-                row.style.display = '';
-            } else if (tipo === 'takeaway' && row.dataset.tipo === 'takeaway') {
-                row.style.display = '';
-            } else if (tipo === 'restaurant' && row.dataset.tipo === 'restaurant') {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        });
+        // Verificar si cumple con búsqueda Y filtro
+        const cumpleBusqueda = text.includes(searchTerm);
+        const cumpleFiltro = (filtroActivo === 'todos' || tipoPedido === filtroActivo);
+        
+        row.style.display = (cumpleBusqueda && cumpleFiltro) ? '' : 'none';
     });
 });
 
