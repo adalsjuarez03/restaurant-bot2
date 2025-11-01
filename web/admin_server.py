@@ -298,7 +298,6 @@ def check_email_availability(email):
         }), 500
 
 
-# ==================== FIN DE RUTAS DE REGISTRO ====================
 # ==================== RUTAS DE AUTENTICACIÓN ====================
 
 @app.route('/')
@@ -456,32 +455,71 @@ def gestionar_categorias():
 @app.route('/menu/items', methods=['GET', 'POST', 'PUT', 'DELETE'])
 @login_required
 def gestionar_items():
-    """Gestión de items del menú"""
+    """Gestión de items del menú - CORREGIDO"""
     user = get_current_user()
     restaurante_id = user['restaurante_id']
     
     if request.method == 'POST':
         data = request.get_json()
         
-        # Crear nuevo item
+        print("=" * 60)
+        print("📝 CREANDO NUEVO ITEM")
+        print(f"   Datos recibidos: {data}")
+        
+        # Extraer ingredientes antes de crear el item
+        ingredientes = data.pop('ingredientes', [])
+        print(f"   Ingredientes recibidos (tipo: {type(ingredientes)}): {ingredientes}")
+        
+        # Crear el item SIN ingredientes
         item_id = db.crear_item_menu(restaurante_id, data)
         
         if item_id:
-            # Agregar ingredientes si existen
-            if 'ingredientes' in data and data['ingredientes']:
-                for idx, ing in enumerate(data['ingredientes']):
-                    db.agregar_ingrediente(item_id, ing, False, idx)
+            # Ahora guardar los ingredientes por separado
+            if ingredientes and len(ingredientes) > 0:
+                print(f"   Guardando {len(ingredientes)} ingredientes...")
+                success = db.guardar_ingredientes_item(item_id, ingredientes)
+                
+                if not success:
+                    print("   ⚠️ Error guardando ingredientes, pero item creado")
+            else:
+                print("   ℹ️ Sin ingredientes para guardar")
             
+            print("=" * 60)
             return jsonify({'success': True, 'message': 'Item creado', 'id': item_id})
+        
+        print("=" * 60)
         return jsonify({'success': False, 'message': 'Error al crear item'}), 500
     
     elif request.method == 'PUT':
         data = request.get_json()
         item_id = data.get('id')
         
+        print("=" * 60)
+        print(f"✏️ ACTUALIZANDO ITEM {item_id}")
+        print(f"   Datos recibidos: {data}")
+        
+        # Extraer ingredientes
+        ingredientes = data.pop('ingredientes', None)
+        print(f"   Ingredientes recibidos (tipo: {type(ingredientes)}): {ingredientes}")
+        
+        # Actualizar el item (sin ingredientes)
         success = db.actualizar_item_menu(item_id, data)
+        
         if success:
+            # Actualizar ingredientes si se proporcionaron
+            if ingredientes is not None:  # Puede ser lista vacía []
+                print(f"   Actualizando {len(ingredientes)} ingredientes...")
+                ing_success = db.guardar_ingredientes_item(item_id, ingredientes)
+                
+                if not ing_success:
+                    print("   ⚠️ Error actualizando ingredientes")
+            else:
+                print("   ℹ️ Sin cambios en ingredientes")
+            
+            print("=" * 60)
             return jsonify({'success': True, 'message': 'Item actualizado'})
+        
+        print("=" * 60)
         return jsonify({'success': False, 'message': 'Error al actualizar'}), 500
     
     elif request.method == 'DELETE':
@@ -496,7 +534,6 @@ def gestionar_items():
     if categoria_id:
         items = db.get_items_por_categoria(restaurante_id, categoria_id)
     else:
-        # Obtener todos los items
         categorias = db.get_categorias_menu(restaurante_id)
         items = []
         for cat in categorias:

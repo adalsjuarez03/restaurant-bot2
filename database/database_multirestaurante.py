@@ -469,7 +469,7 @@ class DatabaseManager:
     
     @staticmethod
     def get_ingredientes_item(item_id):
-        """Obtener ingredientes de un item"""
+        """Obtener ingredientes de un item - RETORNA LISTA"""
         try:
             with get_db_cursor() as (cursor, conn):
                 cursor.execute("""
@@ -477,28 +477,51 @@ class DatabaseManager:
                     WHERE item_id = %s 
                     ORDER BY orden
                 """, (item_id,))
-                return [row['nombre'] for row in cursor.fetchall()]
+            
+                # ✅ RETORNAR COMO LISTA DE STRINGS
+                ingredientes = [row['nombre'] for row in cursor.fetchall()]
+            
+                print(f"✅ Ingredientes obtenidos para item {item_id}: {ingredientes}")
+            
+                return ingredientes
         except Error as e:
             print(f"❌ Error obteniendo ingredientes: {e}")
-            return []
+            return []  # ✅ SIEMPRE RETORNAR LISTA
     
     @staticmethod
-    def agregar_ingrediente(item_id, nombre, alergeno=False, orden=0):
-        """Agregar un ingrediente a un item"""
+    def guardar_ingredientes_item(item_id, ingredientes_lista):
+        """
+        Guardar ingredientes de un item - REEMPLAZA todos los existentes
+        ingredientes_lista debe ser una lista de strings: ['Tomate', 'Queso', 'Cebolla']
+        """
         try:
             with get_db_cursor() as (cursor, conn):
-                cursor.execute("""
-                    INSERT INTO ingredientes 
-                    (item_id, nombre, alergeno, orden)
-                    VALUES (%s, %s, %s, %s)
-                """, (item_id, nombre, alergeno, orden))
-                
+                # 1. Eliminar ingredientes existentes
+                cursor.execute("DELETE FROM ingredientes WHERE item_id = %s", (item_id,))
+                print(f"🗑️ Ingredientes anteriores eliminados para item {item_id}")
+            
+                # 2. Insertar nuevos ingredientes
+                if ingredientes_lista and len(ingredientes_lista) > 0:
+                    for orden, ingrediente in enumerate(ingredientes_lista):
+                        ingrediente_limpio = ingrediente.strip()
+                    
+                        if ingrediente_limpio:
+                            cursor.execute("""
+                                INSERT INTO ingredientes (item_id, nombre, alergeno, orden)
+                                VALUES (%s, %s, %s, %s)
+                            """, (item_id, ingrediente_limpio, False, orden))
+                        
+                            print(f"  ✅ Ingrediente {orden + 1}: {ingrediente_limpio}")
+            
                 conn.commit()
-                return cursor.lastrowid
+                print(f"✅ Total de ingredientes guardados: {len(ingredientes_lista) if ingredientes_lista else 0}")
+                return True
+            
         except Error as e:
-            print(f"❌ Error agregando ingrediente: {e}")
-            return None
-    
+            print(f"❌ Error guardando ingredientes: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
     # ==================== NUEVOS MÉTODOS DINÁMICOS ====================
     
     @staticmethod

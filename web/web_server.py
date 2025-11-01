@@ -7,6 +7,7 @@ import sys
 import os
 import unicodedata
 import json
+import re  # ✅ AGREGAR IMPORT
 from datetime import datetime
 
 def normalizar_texto(texto):
@@ -42,6 +43,27 @@ CORS(app)
 db = DatabaseManager()
 
 chat_sessions = {}
+
+# ==================== AGREGAR FUNCIÓN DE VERIFICACIÓN DE TIEMPOS ====================
+
+def verificar_tiempos_bd(restaurante_id):
+    """Verificar que todos los items tengan tiempo_preparacion"""
+    from database.database_multirestaurante import get_db_cursor
+    
+    with get_db_cursor() as (cursor, conn):
+        cursor.execute("""
+            SELECT COUNT(*) as total,
+                   SUM(CASE WHEN tiempo_preparacion IS NULL THEN 1 ELSE 0 END) as sin_tiempo
+            FROM items_menu 
+            WHERE restaurante_id = %s
+        """, (restaurante_id,))
+        result = cursor.fetchone()
+    
+    if result and result['sin_tiempo'] > 0:
+        print(f"⚠️ ADVERTENCIA: {result['sin_tiempo']} items sin tiempo_preparacion")
+        print(f"   Ejecuta: UPDATE items_menu SET tiempo_preparacion = '15-20 min' WHERE tiempo_preparacion IS NULL AND restaurante_id = {restaurante_id}")
+    else:
+        print(f"✅ Todos los items tienen tiempo_preparacion definido")
 
 # ==================== AGREGAR ESTAS FUNCIONES AL INICIO (después de los imports) ====================
 
@@ -238,12 +260,844 @@ def obtener_info_contacto(restaurante_id):
         return cursor.fetchone()
 
 
-# ==================== REEMPLAZAR LA FUNCIÓN send_notification_to_group() ====================
+# ==================== NUEVAS FUNCIONES PARA MENÚ PRINCIPAL ====================
+
+def mostrar_menu_principal(session):
+    """Mostrar menú principal con 4 opciones"""
+    restaurante_info = obtener_info_contacto(session.restaurante_id)
+    nombre_rest = restaurante_info['nombre_restaurante'] if restaurante_info else "Nuestro Restaurante"
+    
+    return f"""🍽️ ¡Bienvenido a {nombre_rest}!
+
+¿Cómo deseas disfrutar hoy?
+
+1️⃣ 🏪 COMER EN LOCAL
+   • Pedido directo a tu mesa
+   • Pago en efectivo o terminal
+
+2️⃣ 🚶 PARA LLEVAR
+   • Listo para recoger
+   • Pago en línea con PayPal
+
+3️⃣ 🚗 DELIVERY A DOMICILIO
+   • Te lo llevamos hasta tu puerta
+   • Pago en línea con PayPal
+
+4️⃣ ℹ️ INFORMACIÓN
+   • Horarios, ubicación, menú, precios
+
+💡 Escribe el número de la opción que prefieras (1, 2, 3 o 4)"""
+
+
+def procesar_seleccion_tipo_pedido(session, opcion):
+    """Procesar la selección del tipo de pedido"""
+    
+    if opcion in ['1', 'local', 'comer aqui', 'comer aquí', 'en local']:
+        session.tipo_pedido_seleccionado = 'restaurant'
+        session.registration_step = 'restaurant_name'
+        
+        return """🏪 ¡PERFECTO! Comer en Local
+
+Para procesar tu pedido, necesito algunos datos:
+
+👤 ¿Cuál es tu nombre completo?"""
+    
+    elif opcion in ['2', 'llevar', 'para llevar', 'takeaway', 'recoger']:
+        session.tipo_pedido_seleccionado = 'takeaway'
+        session.registration_step = 'takeaway_name'
+        
+        return """🚶 ¡EXCELENTE! Para Llevar
+
+Te prepararemos tu pedido para que lo recojas.
+
+👤 ¿Cuál es tu nombre completo?"""
+    
+    elif opcion in ['3', 'delivery', 'domicilio', 'envio', 'envío']:
+        session.tipo_pedido_seleccionado = 'delivery'
+        session.registration_step = 'delivery_name'
+        
+        return """🚗 ¡GENIAL! Delivery a Domicilio
+
+Te llevaremos tu pedido hasta tu puerta.
+
+👤 ¿Cuál es tu nombre completo?"""
+    
+    elif opcion in ['4', 'informacion', 'información', 'info']:
+        return mostrar_menu_informacion(session.restaurante_id)
+    
+    else:
+        return """❌ Opción no válida
+
+Por favor, escribe el número de la opción que deseas:
+1 - Comer en Local
+2 - Para Llevar
+3 - Delivery
+4 - Información"""
+
+
+def mostrar_menu_informacion(restaurante_id):
+    """Mostrar menú de información"""
+    return """ℹ️ INFORMACIÓN DEL RESTAURANTE
+
+¿Qué información necesitas?
+
+1️⃣ 🕐 Horarios de atención
+2️⃣ 📍 Ubicación y contacto
+3️⃣ 💵 Precios del menú
+4️⃣ 🚗 Zonas de delivery y costos
+5️⃣ 🔙 Volver al menú principal
+
+💡 Escribe el número de la opción"""
+
+
+def procesar_menu_informacion(session, opcion, restaurante_id):
+    """Procesar selección del menú de información"""
+    
+    if opcion in ['1', 'horarios', 'horario']:
+        return generar_texto_horarios(restaurante_id)
+    
+    elif opcion in ['2', 'ubicacion', 'ubicación', 'contacto', 'direccion', 'dirección']:
+        info = obtener_info_contacto(restaurante_id)
+        
+        if info:
+            return f"""📍 UBICACIÓN Y CONTACTO
+
+🏨 {info['nombre_restaurante']}
+
+📍 Dirección:
+{info['direccion']}
+{info['ciudad']}, {info['estado_republica']}
+
+📱 Teléfono: {info['telefono']}
+📧 Email: {info['email']}
+
+¡Estamos aquí para servirte!
+
+Escribe '0' para volver al menú de información"""
+        else:
+            return "❌ No se pudo obtener la información de contacto"
+    
+    elif opcion in ['3', 'precios', 'precio', 'menu', 'menú']:
+        return generar_respuesta_dinamica(session, 'precios', restaurante_id)
+    
+    elif opcion in ['4', 'delivery', 'envio', 'envío', 'cobertura']:
+        return generar_texto_delivery(restaurante_id)
+    
+    elif opcion in ['5', '0', 'volver', 'atras', 'atrás', 'menu principal', 'menú principal']:
+        session.en_menu_informacion = False
+        return mostrar_menu_principal(session)
+    
+    else:
+        return """❌ Opción no válida
+
+Por favor, escribe el número correcto:
+1 - Horarios
+2 - Ubicación
+3 - Precios
+4 - Delivery
+5 - Volver"""
+
+
+# ==================== FUNCIONES PARA CANTIDADES E INGREDIENTES ====================
+
+# ==================== CORRECCIÓN 1: MEJORAR BÚSQUEDA DE ITEMS ====================
+
+def buscar_items_mejorada(restaurante_id, texto_busqueda):
+    """Búsqueda mejorada de items con múltiples estrategias"""
+    import unicodedata
+    
+    def normalizar(texto):
+        texto = texto.lower()
+        return ''.join(
+            c for c in unicodedata.normalize('NFD', texto)
+            if unicodedata.category(c) != 'Mn'
+        )
+    
+    # Normalizar texto de búsqueda
+    texto_normalizado = normalizar(texto_busqueda)
+    
+    # Buscar en la base de datos
+    items_encontrados = db.buscar_items_por_texto(restaurante_id, texto_normalizado)
+    
+    # Debug mejorado
+    if items_encontrados:
+        print(f"✅ Búsqueda '{texto_busqueda}' encontró {len(items_encontrados)} resultados")
+        for idx, item in enumerate(items_encontrados[:3], 1):
+            print(f"   {idx}. {item['nombre']} (score: {item.get('score', 0)})")
+    else:
+        print(f"❌ Búsqueda '{texto_busqueda}' sin resultados")
+    
+    if items_encontrados:
+        return items_encontrados
+    
+    # Si no encuentra, intentar búsqueda por palabras clave
+    palabras_clave = texto_normalizado.split()
+    
+    # Buscar por cada palabra clave
+    for palabra in palabras_clave:
+        if len(palabra) > 2:  # Solo palabras de más de 2 letras
+            items_parciales = db.buscar_items_por_texto(restaurante_id, palabra)
+            if items_parciales:
+                return items_parciales
+    
+    return []
+
+
+def procesar_agregado_item_con_cantidad(session, texto_busqueda, restaurante_id):
+    """
+    Buscar item y preguntar cantidad ANTES de agregar al carrito - VERSIÓN MEJORADA
+    """
+    import unicodedata
+    
+    # Normalizar texto
+    def normalizar(texto):
+        texto = texto.lower()
+        return ''.join(
+            c for c in unicodedata.normalize('NFD', texto)
+            if unicodedata.category(c) != 'Mn'
+        )
+    
+    # Limpiar texto de búsqueda de forma más inteligente
+    palabras_remover = ['quiero', 'pedir', 'ordenar', 'me gustaría', 'me gustaria', 
+                       'dame', 'un', 'una', 'el', 'la', 'los', 'las', 'de', 'por', 'favor']
+    texto_normalizado = normalizar(texto_busqueda)
+    
+    for palabra in palabras_remover:
+        # Usar regex para reemplazar palabras completas
+        texto_normalizado = re.sub(r'\b' + palabra + r'\b', '', texto_normalizado)
+    
+    texto_normalizado = texto_normalizado.strip()
+    
+    # Si el texto está muy vacío después de limpiar, usar el original
+    if len(texto_normalizado) < 3:
+        texto_normalizado = normalizar(texto_busqueda)
+    
+    # Buscar items con búsqueda mejorada
+    items_encontrados = buscar_items_mejorada(restaurante_id, texto_normalizado)
+    
+    if not items_encontrados:
+        return "🤔 No logré identificar ese platillo.\n\nEscribe 'menú' para ver todas las opciones."
+    
+    item = items_encontrados[0]
+    
+    # Verificar disponibilidad
+    if not item['disponible']:
+        return f"😔 Lo siento, *{item['nombre']}* está temporalmente agotado.\n\nEscribe 'menú' para ver otras opciones."
+    
+    # Guardar item pendiente y activar flujo de cantidad
+    session.item_pendiente = {
+        'id': item['id'],
+        'codigo': item['codigo'],
+        'nombre': item['nombre'],
+        'descripcion': item.get('descripcion', ''),
+        'precio': float(item['precio']),
+        'categoria': item['categoria_nombre']
+    }
+    
+    session.esperando_cantidad = True
+    
+    # Obtener ingredientes si existen
+    ingredientes = db.get_ingredientes_item(item['id'])
+    session.item_pendiente['ingredientes'] = ingredientes
+    
+    # Mensaje de cantidad
+    vegano_emoji = " 🌱" if item.get('vegano') else ""
+    
+    return f"""✨ Has seleccionado:
+
+🍽️ **{item['nombre']}**{vegano_emoji}
+📝 {item.get('descripcion', 'Deliciosa opción')}
+💰 Precio unitario: ${item['precio']}
+
+❓ ¿Cuántas unidades deseas ordenar?
+
+[1]  [2]  [3]  [4]  [5+]
+
+💡 Escribe el número o presiona un botón"""
+
+
+def procesar_cantidad_seleccionada(session, texto):
+    """Procesar la cantidad ingresada por el usuario"""
+    try:
+        cantidad = int(texto)
+        
+        if cantidad < 1:
+            return "❌ La cantidad debe ser al menos 1"
+        
+        if cantidad > 20:
+            return "❌ La cantidad máxima es 20 unidades. Si necesitas más, contáctanos directamente."
+        
+        # Guardar cantidad
+        session.item_pendiente['cantidad'] = cantidad
+        session.esperando_cantidad = False
+        
+        # Verificar si tiene ingredientes personalizables
+        ingredientes = session.item_pendiente.get('ingredientes', [])
+        
+        if ingredientes and len(ingredientes) > 0:
+            # Preguntar por ingredientes
+            session.esperando_ingredientes = True
+            
+            ingredientes_lista = "\n".join([f"✅ {ing}" for ing in ingredientes])
+            
+            return f"""✅ Cantidad: {cantidad} unidad(es)
+
+🍽️ {session.item_pendiente['nombre']} x{cantidad}
+
+🧀 **Ingredientes incluidos:**
+{ingredientes_lista}
+
+❓ ¿Deseas quitar algún ingrediente?
+
+💡 Opciones:
+• Escribe "sin [ingrediente]" (Ej: sin cebolla)
+• Escribe "sin [ing1], sin [ing2]" para quitar varios
+• Escribe "todo bien" o "ninguno" si está perfecto así"""
+        
+        else:
+            # No tiene ingredientes, agregar directamente
+            return agregar_item_al_carrito_final(session)
+    
+    except ValueError:
+        return "❌ Por favor escribe solo un número.\nEjemplo: 2"
+
+
+# ==================== CORRECCIÓN 2: MEJORAR DETECCIÓN DE INGREDIENTES ====================
+
+def procesar_modificacion_ingredientes(session, texto):
+    """
+    Procesar modificación de ingredientes - VERSIÓN MEJORADA CON DETECCIÓN INTELIGENTE
+    """
+    texto_lower = texto.lower()
+    
+    # Si no quiere quitar nada
+    if any(word in texto_lower for word in ['todo bien', 'ninguno', 'nada', 'asi esta bien', 'está bien', 'ok', 'perfecto', 'no quitar']):
+        session.item_pendiente['ingredientes_quitados'] = []
+        session.esperando_ingredientes = False
+        return agregar_item_al_carrito_final(session)
+    
+    # Extraer ingredientes a quitar con búsqueda más inteligente
+    import unicodedata
+    
+    def normalizar(texto):
+        texto = texto.lower()
+        return ''.join(
+            c for c in unicodedata.normalize('NFD', texto)
+            if unicodedata.category(c) != 'Mn'
+        )
+    
+    texto_normalizado = normalizar(texto_lower)
+    
+    # ✅ OBTENER INGREDIENTES COMO LISTA (NO COMO STRING)
+    ingredientes_disponibles = session.item_pendiente.get('ingredientes', [])
+    
+    # ✅ ASEGURAR QUE SEA UNA LISTA
+    if isinstance(ingredientes_disponibles, str):
+        # Si por error viene como string, convertirlo a lista
+        ingredientes_disponibles = [ing.strip() for ing in ingredientes_disponibles.split(',') if ing.strip()]
+    
+    ingredientes_quitados = []
+    
+    print(f"🔍 Texto del usuario: {texto}")
+    print(f"🔍 Ingredientes disponibles: {ingredientes_disponibles}")
+    
+    # Buscar patrones "sin X"
+    patron_sin = re.findall(r'sin\s+(\w+(?:\s+\w+)?)', texto_normalizado)
+    
+    print(f"🔍 Patrones 'sin' encontrados: {patron_sin}")
+    
+    for palabra in patron_sin:
+        for ingrediente in ingredientes_disponibles:
+            ing_normalizado = normalizar(ingrediente)
+            palabra_normalizada = normalizar(palabra)
+            
+            # ✅ BÚSQUEDA MÁS PRECISA
+            # Verificar si la palabra está contenida en el ingrediente O viceversa
+            if (palabra_normalizada in ing_normalizado or 
+                ing_normalizado in palabra_normalizada or
+                # También verificar coincidencia de palabras completas
+                palabra_normalizada == ing_normalizado.split()[0] if ing_normalizado else False):
+                
+                if ingrediente not in ingredientes_quitados:
+                    ingredientes_quitados.append(ingrediente)
+                    print(f"✅ Match encontrado: '{palabra}' → '{ingrediente}'")
+    
+    # Si no se encontraron con "sin", buscar palabras directamente en ingredientes
+    if not ingredientes_quitados:
+        # Separar texto en palabras individuales
+        palabras_texto = [p.strip() for p in texto_normalizado.replace('sin', '').replace(',', ' ').split() if len(p.strip()) > 2]
+        
+        print(f"🔍 Palabras a buscar: {palabras_texto}")
+        
+        for palabra in palabras_texto:
+            for ingrediente in ingredientes_disponibles:
+                ing_normalizado = normalizar(ingrediente)
+                
+                # Buscar coincidencia en cualquier palabra del ingrediente
+                palabras_ingrediente = ing_normalizado.split()
+                
+                for palabra_ing in palabras_ingrediente:
+                    if (palabra in palabra_ing or palabra_ing in palabra):
+                        if ingrediente not in ingredientes_quitados:
+                            ingredientes_quitados.append(ingrediente)
+                            print(f"✅ Match directo: '{palabra}' → '{ingrediente}'")
+                            break
+    
+    # Si aún no se encontraron, mostrar ayuda específica
+    if not ingredientes_quitados:
+        ingredientes_lista = "\n".join([f"• {ing}" for ing in ingredientes_disponibles])
+        
+        return f'''🤔 No identifiqué los ingredientes a quitar.
+
+🧀 **Ingredientes disponibles:**
+{ingredientes_lista}
+
+💡 **Por favor intenta de nuevo:**
+- Escribe "sin [ingrediente]" (Ej: sin cebolla)
+- Escribe "sin [ing1], sin [ing2]" para quitar varios
+- Escribe "todo bien" si no quieres quitar nada
+
+📝 **Ejemplos válidos:**
+- sin cebolla
+- sin tomate, sin lechuga
+- no quiero cebolla
+- quitar mayonesa'''
+    
+    # Guardar modificación
+    session.item_pendiente['ingredientes_quitados'] = ingredientes_quitados
+    session.esperando_ingredientes = False
+    
+    print(f"✅ Ingredientes a quitar: {ingredientes_quitados}")
+    
+    return agregar_item_al_carrito_final(session)
+
+
+def agregar_item_al_carrito_final(session):
+    """Agregar item al carrito con todos los detalles"""
+    item = session.item_pendiente
+    cantidad = item.get('cantidad', 1)
+    precio_unitario = item['precio']
+    subtotal_item = precio_unitario * cantidad
+    
+    # Crear objeto para el carrito
+    item_carrito = {
+        'id': item['id'],
+        'codigo': item['codigo'],
+        'nombre': item['nombre'],
+        'precio': precio_unitario,
+        'cantidad': cantidad,
+        'subtotal': subtotal_item,
+        'categoria': item['categoria']
+    }
+    
+    # Agregar modificaciones si existen
+    ingredientes_quitados = item.get('ingredientes_quitados', [])
+    if ingredientes_quitados:
+        item_carrito['sin_ingredientes'] = ingredientes_quitados
+    
+    # Agregar al carrito
+    session.cart.append(item_carrito)
+    
+    # Calcular totales
+    total_items = len(session.cart)
+    subtotal_carrito = sum(i['subtotal'] for i in session.cart)
+    
+    # Mensaje de confirmación
+    mensaje = f"""✅ ¡Agregado al pedido!
+
+📦 **{item['nombre']}** x{cantidad}"""
+    
+    if ingredientes_quitados:
+        mensaje += f"\n   🚫 Sin: {', '.join(ingredientes_quitados)}"
+    
+    mensaje += f"\n💰 Subtotal: ${subtotal_item:.2f}"
+    
+    mensaje += f"""
+
+🛒 **Resumen del carrito** ({total_items} items):
+"""
+    
+    for i in session.cart:
+        mensaje += f"\n• {i['nombre']} x{i['cantidad']} - ${i['subtotal']:.2f}"
+        if i.get('sin_ingredientes'):
+            mensaje += f"\n  🚫 Sin: {', '.join(i['sin_ingredientes'])}"
+    
+    mensaje += f"""
+
+💵 **Subtotal actual:** ${subtotal_carrito:.2f}
+
+¿Qué deseas hacer?
+• Escribe "menú" para agregar más items
+• Escribe "confirmar pedido" para finalizar
+• Escribe "ver carrito" para revisar tu pedido"""
+    
+    # Limpiar item pendiente
+    session.item_pendiente = None
+    
+    return mensaje
+
+
+def formatear_resumen_carrito(session):
+    """Generar resumen formateado del carrito"""
+    if not session.cart:
+        return "🛒 Tu carrito está vacío"
+    
+    mensaje = f"🛒 **Tu Carrito** ({len(session.cart)} items)\n\n"
+    
+    for item in session.cart:
+        mensaje += f"• {item['nombre']} x{item['cantidad']} - ${item['subtotal']:.2f}\n"
+        
+        if item.get('sin_ingredientes'):
+            mensaje += f"  🚫 Sin: {', '.join(item['sin_ingredientes'])}\n"
+    
+    subtotal = sum(i['subtotal'] for i in session.cart)
+    mensaje += f"\n💵 **Subtotal:** ${subtotal:.2f}"
+    
+    return mensaje
+
+
+# ==================== CORRECCIÓN 3: MEJORAR CONFIRMACIÓN DE PEDIDO ====================
+
+def confirmar_pedido_mejorado(session, restaurante_id):
+    """
+    Confirmar pedido con validaciones específicas según tipo - VERSIÓN MEJORADA
+    """
+    
+    # Validar que hay items
+    if len(session.cart) == 0:
+        return """🛒 Tu carrito está vacío
+
+Aún no has agregado ningún platillo.
+
+Escribe "menú" para ver nuestras opciones."""
+    
+    # Calcular subtotal
+    subtotal = sum(item['subtotal'] for item in session.cart)
+    
+    # Obtener tipo de pedido
+    tipo_pedido = session.tipo_pedido_seleccionado or 'delivery'
+    
+    # ==================== VALIDACIONES POR TIPO ====================
+    
+    if tipo_pedido == 'restaurant':
+        # ✅ COMER EN LOCAL: No requiere validación de mínimo
+        costo_envio = 0
+        metodo_pago = "💳 Efectivo o Tarjeta en el local"
+        
+    elif tipo_pedido == 'takeaway':
+        # ✅ PARA LLEVAR: Validar pedido mínimo (opcional)
+        costo_envio = 0
+        metodo_pago = "💳 Pago en línea con PayPal"
+        
+        # Pedido mínimo para takeaway (configuración)
+        pedido_minimo_takeaway = 100  # Puedes hacerlo dinámico desde BD
+        
+        if subtotal < pedido_minimo_takeaway:
+            faltante = pedido_minimo_takeaway - subtotal
+            return f"""❌ PEDIDO MÍNIMO NO ALCANZADO (Para Llevar)
+
+💰 Subtotal: ${subtotal:.2f}
+🛒 Pedido mínimo: ${pedido_minimo_takeaway:.2f}
+❗ Te faltan: ${faltante:.2f}
+
+Escribe 'menú' para agregar más items."""
+        
+    elif tipo_pedido == 'delivery':
+        # ✅ DELIVERY: Validar pedido mínimo y calcular envío
+        costo_envio, pedido_minimo = calcular_costo_envio_dinamico(restaurante_id, subtotal)
+        metodo_pago = "💳 Pago en línea con PayPal"
+        
+        if subtotal < pedido_minimo:
+            faltante = pedido_minimo - subtotal
+            return f"""❌ PEDIDO MÍNIMO NO ALCANZADO (Delivery)
+
+💰 Subtotal: ${subtotal:.2f}
+🛒 Pedido mínimo: ${pedido_minimo:.2f}
+❗ Te faltan: ${faltante:.2f}
+
+Escribe 'menú' para agregar más items."""
+    
+    else:
+        # Fallback
+        costo_envio = 0
+        metodo_pago = "💳 A definir"
+    
+    # Calcular total
+    total = subtotal + costo_envio
+
+    # ==================== ✅ AGREGAR ESTO AQUÍ ====================
+    # Calcular tiempo estimado desde BD
+    detalles_temp = []
+    for item_cart in session.cart:
+        item_bd = db.get_item_by_id(item_cart['id'])
+        if item_bd:
+            detalles_temp.append(item_bd)
+
+    tiempos = []
+    for item_bd in detalles_temp:
+        if item_bd and item_bd.get('tiempo_preparacion'):
+            tiempo_str = item_bd['tiempo_preparacion']
+            numeros = re.findall(r'\d+', tiempo_str)
+            if numeros:
+                tiempos.append(int(numeros[-1]))
+
+    # Calcular tiempo estimado
+    if tiempos:
+        tiempo_max = max(tiempos)
+        tiempo_estimado = f"{tiempo_max}-{tiempo_max + 5} minutos"
+    else:
+        # Tiempos por defecto según tipo
+        if tipo_pedido == 'restaurant':
+            tiempo_estimado = "15-20 minutos"
+        elif tipo_pedido == 'takeaway':
+            tiempo_estimado = "20-30 minutos"
+        else:  # delivery
+            delivery_config = obtener_info_delivery(restaurante_id)
+            tiempo_estimado = delivery_config.get('tiempo_entrega', '30-45 minutos') if delivery_config else '30-45 minutos'
+
+    print(f"⏱ Tiempo estimado calculado: {tiempo_estimado}")
+    # ==================== FIN DE CÓDIGO AGREGADO ====================
+
+    # ==================== CREAR PEDIDO EN BD ====================
+    try:
+        resultado_pedido = db.crear_pedido_simple(
+            restaurante_id, 
+            session.cliente_id, 
+            tipo_pedido,  # ✅ Ahora usamos el tipo correcto
+            'web'
+        )
+        
+        if not resultado_pedido or 'pedido_id' not in resultado_pedido:
+            return "❌ Error al crear el pedido. Por favor intenta de nuevo."
+        
+        pedido_id = resultado_pedido['pedido_id']
+        numero_pedido = resultado_pedido['numero_pedido']
+        session.pedido_id = pedido_id
+        
+        print(f"✅ Pedido creado - ID: {pedido_id}, Número: {numero_pedido}, Tipo: {tipo_pedido}")
+        
+        # Agregar items con detalles
+        items_agregados = 0
+        for item in session.cart:
+            # Agregar notas sobre ingredientes quitados
+            notas_item = None
+            if item.get('sin_ingredientes'):
+                notas_item = f"Sin: {', '.join(item['sin_ingredientes'])}"
+            
+            success = db.agregar_item_pedido(
+                pedido_id, 
+                item['id'], 
+                item.get('cantidad', 1), 
+                float(item['precio'])
+            )
+            
+            # Si hay notas, actualizar
+            if success and notas_item:
+                from database.database_multirestaurante import get_db_cursor
+                with get_db_cursor() as (cursor, conn):
+                    cursor.execute("""
+                        UPDATE detalle_pedidos 
+                        SET notas_item = %s 
+                        WHERE pedido_id = %s AND item_id = %s
+                        ORDER BY id DESC LIMIT 1
+                    """, (notas_item, pedido_id, item['id']))
+                    conn.commit()
+            
+            if success:
+                items_agregados += 1
+                print(f"✅ Item agregado: {item['nombre']} x{item.get('cantidad', 1)}")
+        
+        if items_agregados == 0:
+            return "❌ No se pudieron agregar los items. Intenta de nuevo."
+        
+        # Actualizar totales en BD
+        from database.database_multirestaurante import get_db_cursor
+        with get_db_cursor() as (cursor, conn):
+            # Guardar datos específicos según tipo
+            if tipo_pedido == 'restaurant':
+                cursor.execute("""
+                    UPDATE pedidos 
+                    SET total = %s, 
+                        subtotal = %s,
+                        costo_envio = 0,
+                        direccion_entrega = %s,
+                        notas = %s
+                    WHERE id = %s
+                """, (
+                    total, 
+                    subtotal, 
+                    f"Mesa {session.numero_mesa}",
+                    f"Comensales: {session.numero_comensales or 'No especificado'}",
+                    pedido_id
+                ))
+            else:
+                cursor.execute("""
+                    UPDATE pedidos 
+                    SET total = %s, 
+                        subtotal = %s,
+                        costo_envio = %s
+                    WHERE id = %s
+                """, (total, subtotal, costo_envio, pedido_id))
+            
+            conn.commit()
+        
+        # Actualizar estado
+        db.actualizar_estado_pedido(pedido_id, 'confirmado')
+        
+        # Obtener detalles finales
+        pedido_final = db.get_pedido(pedido_id)
+        detalles = db.get_detalle_pedido(pedido_id)
+        
+        # Generar resumen de items
+        if detalles:
+            order_summary = "\n".join([
+                f"• {d['item_nombre']} x{d['cantidad']} - ${d['subtotal']:.2f}"
+                + (f"\n  🚫 {d['notas_item']}" if d.get('notas_item') else "")
+                for d in detalles
+            ])
+        else:
+            order_summary = "\n".join([
+                f"• {item['nombre']} x{item.get('cantidad', 1)} - ${item['subtotal']:.2f}" 
+                + (f"\n  🚫 Sin: {', '.join(item['sin_ingredientes'])}" if item.get('sin_ingredientes') else "")
+                for item in session.cart
+            ])
+        
+        # ==================== MENSAJE SEGÚN TIPO ====================
+        
+        if tipo_pedido == 'restaurant':
+            # MENSAJE PARA COMER EN LOCAL
+            mensaje_confirmacion = f"""✅ ¡PEDIDO CONFIRMADO!
+
+🎫 Número de orden: {numero_pedido}
+🏪 Tipo: Comer en Local
+
+👤 Cliente: {session.customer_name}
+🪑 Mesa: {session.numero_mesa}
+👥 Comensales: {session.numero_comensales or 'No especificado'}"""
+            
+            if session.customer_phone:
+                mensaje_confirmacion += f"\n📱 Teléfono: {session.customer_phone}"
+            
+            mensaje_confirmacion += f"""
+
+📋 Tu pedido:
+{order_summary}
+
+💵 TOTAL: ${total:.2f}
+💳 Pago: Efectivo o Tarjeta en el local
+
+⏱ Tiempo estimado: {tiempo_estimado}
+
+✅ Tu pedido está siendo procesado
+🍽️ Te lo llevaremos a tu mesa
+
+¡Gracias por tu preferencia!
+
+Escribe "menú" para hacer otro pedido."""
+        
+        elif tipo_pedido == 'takeaway':
+            # MENSAJE PARA LLEVAR
+            mensaje_confirmacion = f"""✅ ¡PEDIDO CONFIRMADO!
+
+🎫 Número de orden: {numero_pedido}
+🚶 Tipo: Para Llevar
+
+👤 Cliente: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+📧 Email: {session.customer_email}
+
+📋 Tu pedido:
+{order_summary}
+
+💵 TOTAL: ${total:.2f}
+💳 Pago: PayPal (requerido)
+
+⏱ Tiempo estimado: {tiempo_estimado}
+
+📞 Próximos pasos:
+1️⃣ Realiza el pago con PayPal (botón abajo)
+2️⃣ Te avisaremos cuando esté listo
+3️⃣ Recoge tu pedido en el restaurante
+
+✅ Pedido guardado en base de datos
+
+Escribe "menú" para hacer otro pedido."""
+        
+        elif tipo_pedido == 'delivery':
+            # MENSAJE PARA DELIVERY
+            mensaje_costo = f"""💵 DESGLOSE:
+🍽️ Subtotal: ${subtotal:.2f}
+🚗 Envío: ${costo_envio:.2f}"""
+            
+            if costo_envio == 0 and delivery_config and subtotal >= delivery_config.get('envio_gratis_desde', 999999):
+                mensaje_costo += " ¡GRATIS! 🎉"
+            
+            mensaje_costo += f"\n💰 TOTAL: ${total:.2f}"
+            
+            mensaje_confirmacion = f"""✅ ¡PEDIDO CONFIRMADO!
+
+🎫 Número de orden: {numero_pedido}
+🚗 Tipo: Delivery a Domicilio
+
+👤 Cliente: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+📍 Dirección: {session.customer_address}
+📧 Email: {session.customer_email}
+
+📋 Tu pedido:
+{order_summary}
+
+{mensaje_costo}
+
+⏱ Tiempo estimado: {tiempo_estimado}
+
+📞 Próximos pasos:
+1️⃣ Realiza el pago con PayPal (botón abajo)
+2️⃣ Prepararemos tu pedido
+3️⃣ Te notificaremos cuando esté en camino
+4️⃣ ¡Disfruta en casa!
+
+✅ Pedido guardado en base de datos
+
+Escribe "menú" para hacer otro pedido."""
+        
+        else:
+            # Mensaje genérico
+            mensaje_confirmacion = f"""✅ ¡PEDIDO CONFIRMADO!
+
+🎫 Número: {numero_pedido}
+
+Total: ${total:.2f}
+
+Escribe "menú" para hacer otro pedido."""
+        
+        # Enviar notificación a Telegram
+        send_notification_to_group("new_order", {
+            "items": detalles if detalles else session.cart,
+            "total": total,
+            "order_number": numero_pedido
+        }, session)
+        
+        # Limpiar carrito
+        session.cart = []
+        
+        return mensaje_confirmacion
+        
+    except Exception as e:
+        print(f"❌ Error confirmando pedido: {e}")
+        import traceback
+        traceback.print_exc()
+        return "❌ Hubo un error al confirmar tu pedido. Por favor contacta al restaurante."
+
+
+# ==================== REEMPLAZAR send_notification_to_group() EN web_server.py ====================
 
 def send_notification_to_group(notification_type, data, session):
-    """Enviar notificación al grupo de Telegram - DINÁMICO POR RESTAURANTE"""
+    """
+    Enviar notificación al grupo de Telegram - DINÁMICO Y DIFERENCIADO POR TIPO
+    """
     try:
-        # ✅ Obtener configuración de Telegram del restaurante
+        # Obtener configuración de Telegram del restaurante
         from database.database_multirestaurante import get_db_cursor
         
         with get_db_cursor() as (cursor, conn):
@@ -254,16 +1108,11 @@ def send_notification_to_group(notification_type, data, session):
             """, (session.restaurante_id,))
             config = cursor.fetchone()
         
-        if not config:
-            print(f"⚠️ No hay configuración de Telegram para restaurante {session.restaurante_id}")
-            return
-        
-        # ✅ Verificar si hay bot_token
-        if not config.get('bot_token'):
+        if not config or not config.get('bot_token'):
             print(f"⚠️ No hay bot_token configurado para restaurante {session.restaurante_id}")
             return
         
-        # ✅ Parsear config_notificaciones si existe
+        # Parsear config_notificaciones
         config_notif = {'notificar_pedidos': True, 'notificar_reservaciones': True}
         
         if config.get('config_notificaciones'):
@@ -272,48 +1121,105 @@ def send_notification_to_group(notification_type, data, session):
                     config_notif = json.loads(config['config_notificaciones'])
                 else:
                     config_notif = config['config_notificaciones']
-                print(f"📋 Config notificaciones cargada: {config_notif}")
             except Exception as e:
                 print(f"⚠️ Error parseando config_notificaciones: {e}")
         
-        # ✅ Verificar si el tipo de notificación está activo
+        # Verificar si está activo
         if notification_type == "new_order" and not config_notif.get('notificar_pedidos', True):
-            print(f"ℹ️ Notificaciones de pedidos desactivadas para restaurante {session.restaurante_id}")
+            print(f"ℹ️ Notificaciones de pedidos desactivadas")
             return
         
         if notification_type == "new_reservation" and not config_notif.get('notificar_reservaciones', True):
-            print(f"ℹ️ Notificaciones de reservaciones desactivadas para restaurante {session.restaurante_id}")
+            print(f"ℹ️ Notificaciones de reservaciones desactivadas")
             return
         
-        # ✅ Determinar chat destino (prioridad: grupo > admin)
+        # Determinar chat destino
         target_chat = config.get('telegram_group_id') or config.get('telegram_admin_id')
         
         if not target_chat:
-            print(f"⚠️ No hay chat configurado para restaurante {session.restaurante_id}")
+            print(f"⚠️ No hay chat configurado")
             return
         
-        print(f"📤 Enviando notificación tipo '{notification_type}' a chat {target_chat}")
-        
-        # ✅ Crear bot dinámico con el token del restaurante
+        # Crear bot dinámico
         import telebot
         bot_restaurante = telebot.TeleBot(config['bot_token'])
         
-        # ✅ Construir mensaje según tipo
+        # ==================== CONSTRUIR MENSAJE SEGÚN TIPO ====================
         message = ""
         
         if notification_type == "new_order":
+            # Obtener tipo de pedido
+            tipo_pedido = session.tipo_pedido_seleccionado or 'delivery'
+            
+            # Formatear items
             if data['items'] and isinstance(data['items'][0], dict) and 'item_nombre' in data['items'][0]:
                 items_text = "\n".join([
                     f"• {item['item_nombre']} x{item['cantidad']} - ${item['subtotal']}"
+                    + (f"\n  🚫 {item['notas_item']}" if item.get('notas_item') else "")
                     for item in data['items']
                 ])
             else:
                 items_text = "\n".join([
-                    f"• {item['nombre']} x{item.get('cantidad', 1)} - ${item['precio']}"
+                    f"• {item['nombre']} x{item.get('cantidad', 1)} - ${item.get('subtotal', item['precio'])}"
+                    + (f"\n  🚫 Sin: {', '.join(item['sin_ingredientes'])}" if item.get('sin_ingredientes') else "")
                     for item in data['items']
                 ])
             
-            message = f"""🆕 NUEVO PEDIDO WEB
+            # ==================== MENSAJE DIFERENCIADO POR TIPO ====================
+            
+            if tipo_pedido == 'restaurant':
+                # 🏪 PEDIDO EN LOCAL
+                message = f"""🏪 NUEVO PEDIDO EN LOCAL
+
+👤 Cliente: {session.customer_name}
+🪑 Mesa: {session.numero_mesa}
+👥 Comensales: {session.numero_comensales or 'No especificado'}"""
+                
+                if session.customer_phone:
+                    message += f"\n📱 Teléfono: {session.customer_phone}"
+                
+                message += f"""
+🌐 Origen: Interfaz Web
+🆔 Session: {session.session_id[:8]}
+📋 Pedido: #{data.get('order_number', 'N/A')}
+
+🍽 PEDIDO:
+{items_text}
+
+💰 Total: ${data['total']:.2f}
+💳 Pago: Efectivo o Tarjeta en el local
+⏰ Hora: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+
+⚡ URGENTE - Cliente esperando en mesa
+✅ Pedido confirmado en base de datos"""
+            
+            elif tipo_pedido == 'takeaway':
+                # 🚶 PARA LLEVAR
+                message = f"""🚶 NUEVO PEDIDO PARA LLEVAR
+
+👤 Cliente: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+📧 Email: {session.customer_email or 'No proporcionado'}
+🌐 Origen: Interfaz Web
+🆔 Session: {session.session_id[:8]}
+📋 Pedido: #{data.get('order_number', 'N/A')}
+
+🍽 PEDIDO:
+{items_text}
+
+💰 Total: ${data['total']:.2f}
+💳 Pago: PayPal (REQUERIDO)
+⏰ Hora: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+⏱ Listo en: 20-30 minutos
+
+📞 AVISAR al cliente cuando esté listo:
+{session.customer_phone}
+
+✅ Pedido confirmado en base de datos"""
+            
+            elif tipo_pedido == 'delivery':
+                # 🚗 DELIVERY
+                message = f"""🚗 NUEVO PEDIDO DELIVERY
 
 👤 Cliente: {session.customer_name}
 📱 Teléfono: {session.customer_phone}
@@ -326,12 +1232,35 @@ def send_notification_to_group(notification_type, data, session):
 🍽 PEDIDO:
 {items_text}
 
+💰 Total: ${data['total']:.2f}
+💳 Pago: PayPal (REQUERIDO)
+⏰ Hora: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+⏱ Entregar en: 30-45 minutos
+
+🚗 Coordinar repartidor
+📞 Contacto: {session.customer_phone}
+
+✅ Pedido confirmado en base de datos"""
+            
+            else:
+                # Mensaje genérico (fallback)
+                message = f"""🆕 NUEVO PEDIDO WEB
+
+👤 Cliente: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+📧 Email: {session.customer_email or 'No proporcionado'}
+📍 Dirección: {session.customer_address or 'N/A'}
+🌐 Origen: Interfaz Web
+📋 Pedido: #{data.get('order_number', 'N/A')}
+
+🍽 PEDIDO:
+{items_text}
+
 💰 Total: ${data['total']}
 ⏰ Hora: {datetime.now().strftime('%d/%m/%Y %H:%M')}
-🏪 Estado: Confirmado
 
 ✅ Pedido guardado en base de datos"""
-            
+        
         elif notification_type == "new_reservation":
             reservacion = data['reservacion']
             
@@ -355,16 +1284,10 @@ def send_notification_to_group(notification_type, data, session):
 
 🌐 Origen: Interfaz Web
 ⏰ Registrado: {datetime.now().strftime('%d/%m/%Y %H:%M')}
-✅ Estado: Pendiente de confirmación"""
-            
-        elif notification_type == "new_message":
-            message = f"""💬 MENSAJE DEL CHAT WEB
+✅ Estado: Pendiente de confirmación
 
-👤 Usuario: {session.customer_name or 'Sin registrar'}
-💬 Mensaje: {data['message']}
-⏰ {datetime.now().strftime('%H:%M')}"""
+📞 LLAMAR para confirmar"""
         
-        # ==================== AGREGAR NUEVO TIPO DE NOTIFICACIÓN ====================
         elif notification_type == "payment_confirmed":
             message = f"""💰 PAGO CONFIRMADO - PAYPAL
 
@@ -374,29 +1297,37 @@ def send_notification_to_group(notification_type, data, session):
 
 👤 Cliente: {session.customer_name}
 📱 Teléfono: {session.customer_phone}
-📍 Dirección: {session.customer_address}
 
 ✅ Estado: PAGADO
 🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}
 
 🔔 ¡Pedido listo para preparar!"""
         
+        elif notification_type == "new_message":
+            message = f"""💬 MENSAJE DEL CHAT WEB
+
+👤 Usuario: {session.customer_name or 'Sin registrar'}
+💬 Mensaje: {data['message']}
+⏰ {datetime.now().strftime('%H:%M')}"""
+        
         else:
             print(f"⚠️ Tipo de notificación no reconocido: {notification_type}")
             return
         
-        # ✅ Enviar mensaje con el bot del restaurante
+        # Enviar mensaje
         bot_restaurante.send_message(target_chat, message)
-        print(f"✅ Notificación '{notification_type}' enviada exitosamente a {target_chat}")
+        print(f"✅ Notificación '{notification_type}' enviada a {target_chat}")
         
     except Exception as e:
-        print(f"❌ Error enviando notificación de Telegram: {e}")
+        print(f"❌ Error enviando notificación: {e}")
         import traceback
         traceback.print_exc()
 
 
+# ==================== MODIFICAR CLASE WebChatSession ====================
+
 class WebChatSession:
-    """Simular una sesión de chat para usuarios web"""
+    """Simular una sesión de chat para usuarios web - ACTUALIZADA"""
     def __init__(self, session_id, restaurante_id):
         self.session_id = session_id
         self.restaurante_id = restaurante_id
@@ -410,15 +1341,27 @@ class WebChatSession:
         self.customer_email = None
         self.pedido_id = None
         self.cliente_id = None
-        self.registration_step = "needs_name"
+        self.registration_step = "needs_initial_selection"  # ✅ CAMBIO AQUÍ
         self.is_registered = False
         
+        # ✅ NUEVOS ATRIBUTOS
+        self.tipo_pedido_seleccionado = None  # 'restaurant', 'takeaway', 'delivery'
+        self.numero_mesa = None
+        self.numero_comensales = None
+        self.en_menu_informacion = False
+        
+        # Reservaciones
         self.reservation_step = None
         self.reservation_date = None
         self.reservation_time = None
         self.reservation_people = None
         self.reservation_occasion = None
         self.reservation_notes = None
+        
+        # ✅ NUEVO: Sistema de cantidades e ingredientes
+        self.item_pendiente = None  # Item que está siendo agregado
+        self.esperando_cantidad = False
+        self.esperando_ingredientes = False
     
     def add_message(self, text, is_user=True):
         message = {
@@ -874,46 +1817,7 @@ def generar_respuesta_dinamica(session, text_lower, restaurante_id):
             return respuesta
     
     if any(word in text_lower for word in ['quiero', 'pedir', 'ordenar', 'me gustaría']):
-        palabras_remover = ['quiero', 'pedir', 'ordenar', 'me gustaría', 'me gustaria', 'dame', 'un', 'una', 'el', 'la', 'los', 'las']
-        texto_busqueda = text_lower
-        for palabra in palabras_remover:
-            texto_busqueda = texto_busqueda.replace(palabra, '')
-        texto_busqueda = texto_busqueda.strip()
-
-        items_encontrados = db.buscar_items_por_texto(restaurante_id, texto_busqueda)
-    
-        if not items_encontrados:
-            return "🤔 No logré identificar ese platillo.\n\nPor favor, escribe 'menú' para ver todas las opciones disponibles."
-    
-        item = items_encontrados[0]
-    
-        if not item['disponible']:
-            return f"😔 Lo siento, *{item['nombre']}* está temporalmente agotado.\n\nEscribe 'menú' para ver otras opciones."
-    
-        platillo = {
-            'id': item['id'],
-            'codigo': item['codigo'],
-            'nombre': item['nombre'],
-            'precio': float(item['precio']),
-            'categoria': item['categoria_nombre'],
-            'cantidad': 1
-        } 
-    
-        session.add_to_cart(platillo)
-        total_cart = sum(item['precio'] * item.get('cantidad', 1) for item in session.cart)
-        items_count = len(session.cart)
-    
-        respuesta = f"✅ ¡Excelente elección!\n\n"
-        respuesta += f"📦 {item['nombre']} agregado a tu pedido\n"
-        respuesta += f"💰 Precio: ${item['precio']}\n\n"
-        respuesta += f"🛒 Resumen de tu pedido ({items_count} items):\n"
-        respuesta += "\n".join([f"• {i['nombre']} - ${i['precio'] * i.get('cantidad', 1)}" for i in session.cart])
-        respuesta += f"\n\n💵 Total actual: ${total_cart}\n\n"
-        respuesta += "¿Deseas agregar algo más?\n"
-        respuesta += "- Escribe 'menú' para ver más opciones\n"
-        respuesta += "- Escribe 'confirmar pedido' para finalizar"
-    
-        return respuesta
+        return procesar_agregado_item_con_cantidad(session, text_lower, restaurante_id)
     
     if any(word in text_lower for word in ['precio', 'precios', 'costo', 'cuanto', 'cuánto', 'barato', 'caro']):
         menu_completo = db.get_menu_completo_display(restaurante_id)
@@ -949,126 +1853,317 @@ def generar_respuesta_dinamica(session, text_lower, restaurante_id):
     return None
 
 def process_bot_message(mock_message, session, restaurante_id):
-    """Procesar mensaje y obtener respuesta del bot"""
+    """Procesar mensaje - VERSIÓN CON CANTIDADES E INGREDIENTES"""
     try:
         text = mock_message.text.strip()
         text_lower = text.lower()
         
+        # ==================== FLUJO DE CANTIDADES E INGREDIENTES ====================
+        # (Ejecutar ANTES de cualquier otra cosa si están activos)
+        
+        if session.esperando_cantidad:
+            return procesar_cantidad_seleccionada(session, text)
+        
+        if session.esperando_ingredientes:
+            return procesar_modificacion_ingredientes(session, text)
+        
+        # ==================== USUARIOS REGISTRADOS ====================
         if session.is_registered:
+            
+            # Detección de intención de ordenar (MEJORADA)
+            if any(word in text_lower for word in ['quiero', 'pedir', 'ordenar', 'me gustaría', 'dame']):
+                return procesar_agregado_item_con_cantidad(session, text_lower, restaurante_id)
+            
+            # Menú de información
+            if session.en_menu_informacion:
+                resultado = procesar_menu_informacion(session, text_lower, restaurante_id)
+                if '0' in text_lower or 'volver' in text_lower:
+                    session.en_menu_informacion = False
+                return resultado
+            
+            # Reservaciones
             reservacion_response = process_reservacion_flow(session, text_lower, text)
             if reservacion_response:
                 return reservacion_response
         
-        reservacion_response = process_reservacion_flow(session, text_lower, text)
-        if reservacion_response:
-            return reservacion_response
-        
+        # ==================== PRIORIDAD 2: FLUJO DE REGISTRO ====================
         if not session.is_registered:
             
-            if session.registration_step == "needs_name":
-                session.registration_step = "waiting_name"
-                
-                restaurante = None
-                from database.database_multirestaurante import get_db_cursor
-                with get_db_cursor() as (cursor, conn):
-                    cursor.execute("SELECT nombre_restaurante FROM restaurantes WHERE id = %s", (restaurante_id,))
-                    result = cursor.fetchone()
-                    if result:
-                        restaurante = result
-                
-                nombre_rest = restaurante['nombre_restaurante'] if restaurante else "nuestro restaurante"
-                
-                return f"""¡Hola! Bienvenido a {nombre_rest} 🍽
-
-Antes de empezar, necesito conocerte un poco mejor.
-
-👤 Por favor, dime tu nombre completo:"""
+            # ===== PASO 0: MOSTRAR MENÚ INICIAL =====
+            if session.registration_step == "needs_initial_selection":
+                session.registration_step = "waiting_initial_selection"
+                return mostrar_menu_principal(session)
             
-            elif session.registration_step == "waiting_name":
+            # ===== PASO 1: PROCESAR SELECCIÓN DE TIPO =====
+            elif session.registration_step == "waiting_initial_selection":
+                resultado = procesar_seleccion_tipo_pedido(session, text_lower)
+                
+                # Si eligió información, activar flag
+                if '1️⃣ 🕐' in resultado:  # Es el menú de información
+                    session.en_menu_informacion = True
+                
+                return resultado
+            
+            # ===== FLUJO: COMER EN LOCAL =====
+            elif session.registration_step == "restaurant_name":
                 if len(text) < 3:
                     return "❌ Por favor ingresa un nombre válido (mínimo 3 caracteres)"
                 
                 session.customer_name = text
-                session.registration_step = "waiting_phone"
-                return f"""Mucho gusto, {session.customer_name}! 😊
-
-📱 Ahora, ¿cuál es tu número de teléfono?
-(Ejemplo: 9611234567)"""
-            
-            elif session.registration_step == "waiting_phone":
-                phone_clean = text.replace(" ", "").replace("-", "")
-                if not phone_clean.isdigit() or len(phone_clean) < 10:
-                    return "❌ Por favor ingresa un número de teléfono válido (10 dígitos)"
+                session.registration_step = "restaurant_table"
                 
-                session.customer_phone = phone_clean
-                session.registration_step = "waiting_address"
-                return """Perfecto! 📞
+                return f"""Perfecto, {session.customer_name}! 😊
 
-📍 ¿Cuál es tu dirección de entrega?
-(Calle, número, colonia)"""
+🪑 ¿En qué número de mesa estás?
+(Ej: 5, 12, 15)"""
             
-            elif session.registration_step == "waiting_address":
-                if len(text) < 10:
-                    return "❌ Por favor proporciona una dirección más completa"
-    
-                session.customer_address = text
-                session.registration_step = "waiting_email"  # ← NUEVO: Ir al paso de email
-    
-                return """✅ Dirección guardada!
+            elif session.registration_step == "restaurant_table":
+                # Validar que sea un número
+                if not text.isdigit():
+                    return "❌ Por favor ingresa solo el número de mesa (Ej: 5)"
+                
+                numero_mesa = int(text)
+                
+                # TODO: Aquí podrías validar contra la tabla 'mesas' en la BD
+                if numero_mesa < 1 or numero_mesa > 50:
+                    return "❌ Número de mesa no válido. Intenta de nuevo."
+                
+                session.numero_mesa = numero_mesa
+                session.registration_step = "restaurant_diners"
+                
+                return f"""✅ Mesa {numero_mesa} registrada
 
-            📧 Por último, ¿cuál es tu correo electrónico?
-            (Necesario para enviarte el recibo de PayPal)
+👥 ¿Cuántas personas son?
+(Opcional - presiona 'saltar' si no quieres compartirlo)"""
+            
+            elif session.registration_step == "restaurant_diners":
+                if 'saltar' in text_lower or 'skip' in text_lower:
+                    session.numero_comensales = None
+                    comensales_texto = "No especificado"
+                else:
+                    if not text.isdigit():
+                        return "❌ Por favor ingresa solo números o escribe 'saltar'"
+                    
+                    session.numero_comensales = int(text)
+                    comensales_texto = f"{session.numero_comensales} personas"
+                
+                session.registration_step = "restaurant_phone"
+                
+                return f"""👥 Comensales: {comensales_texto}
 
-            Ejemplo: tucorreo@gmail.com"""
-
-# ==================== AGREGAR ESTE NUEVO BLOQUE DESPUÉS ====================
-            elif session.registration_step == "waiting_email":
-                # Validar email básico
-                import re
-                email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    
-                if not re.match(email_pattern, text):
-                    return "❌ Por favor ingresa un correo electrónico válido\nEjemplo: tucorreo@gmail.com"
-    
-                session.customer_email = text
-    
-                # AHORA SÍ crear el cliente con todos los datos
+📱 ¿Cuál es tu número de teléfono?
+(Opcional - presiona 'saltar' si no quieres proporcionarlo)
+Ejemplo: 9611234567"""
+            
+            elif session.registration_step == "restaurant_phone":
+                if 'saltar' in text_lower or 'skip' in text_lower:
+                    session.customer_phone = None
+                    telefono = "No proporcionado"
+                else:
+                    phone_clean = text.replace(" ", "").replace("-", "")
+                    if not phone_clean.isdigit() or len(phone_clean) < 10:
+                        return "❌ Teléfono inválido. Escribe 10 dígitos o 'saltar'"
+                    
+                    session.customer_phone = phone_clean
+                    telefono = phone_clean
+                
+                # COMPLETAR REGISTRO PARA LOCAL
                 cliente = db.get_or_create_cliente(
                     web_session_id=session.session_id,
                     nombre=session.customer_name,
                     restaurante_id=restaurante_id,
                     origen="web"
                 )
-    
+                
                 if cliente:
                     session.cliente_id = cliente['id']
-        
-                    # Actualizar con TODOS los datos incluyendo email
+                    
+                    if session.customer_phone:
+                        db.actualizar_cliente(
+                            session.cliente_id,
+                            telefono=session.customer_phone
+                        )
+                    
+                    session.is_registered = True
+                    session.registration_step = "completed"
+                    
+                    return f"""✅ ¡REGISTRO COMPLETADO!
+
+🏪 Tipo: Comer en Local
+👤 Nombre: {session.customer_name}
+🪑 Mesa: {session.numero_mesa}
+👥 Comensales: {session.numero_comensales or 'No especificado'}
+📱 Teléfono: {telefono}
+
+💳 Método de pago: Efectivo o Tarjeta en el local
+
+🎉 ¡Perfecto! Ahora puedes hacer tu pedido.
+
+Escribe "menú" para ver nuestras opciones 🍽️"""
+                else:
+                    return "❌ Error al registrar. Intenta de nuevo."
+            
+            # ===== FLUJO: PARA LLEVAR =====
+            elif session.registration_step == "takeaway_name":
+                if len(text) < 3:
+                    return "❌ Nombre inválido (mínimo 3 caracteres)"
+                
+                session.customer_name = text
+                session.registration_step = "takeaway_phone"
+                
+                return f"""Mucho gusto, {session.customer_name}! 😊
+
+📱 ¿Cuál es tu número de teléfono?
+(Para avisarte cuando esté listo)
+Ejemplo: 9611234567"""
+            
+            elif session.registration_step == "takeaway_phone":
+                phone_clean = text.replace(" ", "").replace("-", "")
+                if not phone_clean.isdigit() or len(phone_clean) < 10:
+                    return "❌ Teléfono inválido (10 dígitos)"
+                
+                session.customer_phone = phone_clean
+                session.registration_step = "takeaway_email"
+                
+                return """✅ Teléfono guardado!
+
+📧 ¿Cuál es tu correo electrónico?
+(Necesario para enviarte el recibo de PayPal)
+Ejemplo: tucorreo@gmail.com"""
+            
+            elif session.registration_step == "takeaway_email":
+                import re
+                email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+                
+                if not re.match(email_pattern, text):
+                    return "❌ Email inválido. Ej: tucorreo@gmail.com"
+                
+                session.customer_email = text
+                
+                # COMPLETAR REGISTRO PARA LLEVAR
+                cliente = db.get_or_create_cliente(
+                    web_session_id=session.session_id,
+                    nombre=session.customer_name,
+                    restaurante_id=restaurante_id,
+                    origen="web"
+                )
+                
+                if cliente:
+                    session.cliente_id = cliente['id']
+                    db.actualizar_cliente(
+                        session.cliente_id,
+                        telefono=session.customer_phone,
+                        email=session.customer_email
+                    )
+                    
+                    session.is_registered = True
+                    session.registration_step = "completed"
+                    
+                    return f"""✅ ¡REGISTRO COMPLETADO!
+
+🚶 Tipo: Para Llevar
+👤 Nombre: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+📧 Email: {session.customer_email}
+
+💳 Pago: PayPal (al confirmar pedido)
+⏱ Tiempo estimado: 20-30 minutos
+
+🎉 ¡Listo! Ahora puedes hacer tu pedido.
+
+Escribe "menú" para ver nuestras opciones 🍽️"""
+                else:
+                    return "❌ Error al registrar. Intenta de nuevo."
+            
+            # ===== FLUJO: DELIVERY (Mantener existente + email) =====
+            elif session.registration_step == "delivery_name":
+                if len(text) < 3:
+                    return "❌ Nombre inválido (mínimo 3 caracteres)"
+                
+                session.customer_name = text
+                session.registration_step = "delivery_phone"
+                
+                return f"""Mucho gusto, {session.customer_name}! 😊
+
+📱 ¿Cuál es tu número de teléfono?
+Ejemplo: 9611234567"""
+            
+            elif session.registration_step == "delivery_phone":
+                phone_clean = text.replace(" ", "").replace("-", "")
+                if not phone_clean.isdigit() or len(phone_clean) < 10:
+                    return "❌ Teléfono inválido (10 dígitos)"
+                
+                session.customer_phone = phone_clean
+                session.registration_step = "delivery_address"
+                
+                return """Perfecto! 📞
+
+📍 ¿Cuál es tu dirección completa de entrega?
+(Calle, número, colonia, referencias)"""
+            
+            elif session.registration_step == "delivery_address":
+                if len(text) < 10:
+                    return "❌ Dirección muy corta. Sé más específico"
+                
+                session.customer_address = text
+                session.registration_step = "delivery_email"
+                
+                return """✅ Dirección guardada!
+
+📧 ¿Cuál es tu correo electrónico?
+(Necesario para enviarte el recibo de PayPal)
+Ejemplo: tucorreo@gmail.com"""
+            
+            elif session.registration_step == "delivery_email":
+                import re
+                email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+                
+                if not re.match(email_pattern, text):
+                    return "❌ Email inválido. Ej: tucorreo@gmail.com"
+                
+                session.customer_email = text
+                
+                # COMPLETAR REGISTRO DELIVERY
+                cliente = db.get_or_create_cliente(
+                    web_session_id=session.session_id,
+                    nombre=session.customer_name,
+                    restaurante_id=restaurante_id,
+                    origen="web"
+                )
+                
+                if cliente:
+                    session.cliente_id = cliente['id']
                     db.actualizar_cliente(
                         session.cliente_id,
                         telefono=session.customer_phone,
                         direccion=session.customer_address,
-                        email=session.customer_email  # ← AGREGAR EMAIL
+                        email=session.customer_email
                     )
-        
+                    
                     session.is_registered = True
                     session.registration_step = "completed"
-        
-                    return f"""✅ ¡Registro completado!
+                    
+                    delivery_config = obtener_info_delivery(restaurante_id)
+                    tiempo = delivery_config.get('tiempo_entrega', '30-45 minutos') if delivery_config else '30-45 minutos'
+                    
+                    return f"""✅ ¡REGISTRO COMPLETADO!
 
-            📝 Tus datos:
-            👤 Nombre: {session.customer_name}
-            📱 Teléfono: {session.customer_phone}
-            📍 Dirección: {session.customer_address}
-            📧 Email: {session.customer_email}
+🚗 Tipo: Delivery a Domicilio
+👤 Nombre: {session.customer_name}
+📱 Teléfono: {session.customer_phone}
+📍 Dirección: {session.customer_address}
+📧 Email: {session.customer_email}
 
-            🎉 ¡Perfecto! Ahora ya puedes hacer tu pedido.
+💳 Pago: PayPal (al confirmar pedido)
+⏱ Tiempo estimado: {tiempo}
 
-            Escribe "menu" para ver nuestras deliciosas opciones 🍽"""
+🎉 ¡Perfecto! Ahora puedes hacer tu pedido.
+
+Escribe "menú" para ver nuestras opciones 🍽️"""
                 else:
-                    return "❌ Error al registrar tus datos. Por favor intenta de nuevo."  
-                
-                
+                    return "❌ Error al registrar. Intenta de nuevo."
+        
+        # ==================== RESTO DEL CÓDIGO EXISTENTE ====================
         respuesta_dinamica = generar_respuesta_dinamica(session, text_lower, restaurante_id)
         if respuesta_dinamica:
             return respuesta_dinamica
@@ -1114,136 +2209,7 @@ Antes de empezar, necesito conocerte un poco mejor.
 ¡Estamos aquí para servirte!"""
 
         elif 'confirmar' in text_lower and 'pedido' in text_lower:
-            if len(session.cart) == 0:
-                return """🛒 Tu carrito está vacío
-        
-Aún no has agregado ningún platillo a tu pedido.
-
-Escribe "menú" para ver nuestras opciones."""
-            
-            try:
-                # ==================== ACTUALIZAR CÁLCULO DE TOTAL EN CONFIRMAR PEDIDO ====================
-                
-                # Calcular subtotal
-                subtotal = sum(item['precio'] * item.get('cantidad', 1) for item in session.cart)
-                
-                # Calcular costo de envío dinámicamente
-                costo_envio, pedido_minimo = calcular_costo_envio_dinamico(restaurante_id, subtotal)
-                
-                # Validar pedido mínimo
-                if subtotal < pedido_minimo:
-                    faltante = pedido_minimo - subtotal
-                    return f"""❌ PEDIDO MÍNIMO NO ALCANZADO
-
-💰 Subtotal: ${subtotal:.2f}
-🛒 Pedido mínimo: ${pedido_minimo:.2f}
-❗ Te faltan: ${faltante:.2f}
-
-Escribe 'menú' para agregar más items."""
-                
-                # Calcular total con envío
-                total = subtotal + costo_envio
-                
-                resultado_pedido = db.crear_pedido_simple(restaurante_id, session.cliente_id, 'delivery', 'web')
-                if not resultado_pedido or 'pedido_id' not in resultado_pedido:
-                    return "❌ Error al crear el pedido. Por favor intenta de nuevo."
-                
-                pedido_id = resultado_pedido['pedido_id']
-                numero_pedido = resultado_pedido['numero_pedido']
-                session.pedido_id = pedido_id
-                
-                print(f"✅ Pedido creado - ID: {pedido_id}, Número: {numero_pedido}")
-                
-                items_agregados = 0
-                for item in session.cart:
-                    success = db.agregar_item_pedido(pedido_id, item['id'], item.get('cantidad', 1), float(item['precio']))
-                    if success:
-                        items_agregados += 1
-                        print(f"✅ Item agregado: {item['nombre']}")
-                    else:
-                        print(f"⚠ No se pudo agregar: {item['nombre']}")
-                
-                if items_agregados == 0:
-                    return "❌ No se pudieron agregar los items al pedido. Por favor intenta de nuevo."
-                
-                # Actualizar total del pedido con envío
-                from database.database_multirestaurante import get_db_cursor
-                with get_db_cursor() as (cursor, conn):
-                    cursor.execute("""
-                        UPDATE pedidos 
-                        SET total = %s, costo_envio = %s
-                        WHERE id = %s
-                    """, (total, costo_envio, pedido_id))
-                    conn.commit()
-                
-                db.actualizar_estado_pedido(pedido_id, 'confirmado')
-                
-                pedido_final = db.get_pedido(pedido_id)
-                detalles = db.get_detalle_pedido(pedido_id)
-                
-                if not pedido_final or not detalles:
-                    print("⚠ No se pudieron obtener los detalles finales del pedido")
-                    order_summary = "\n".join([
-                        f"• {item['nombre']} x{item.get('cantidad', 1)} - ${item['precio'] * item.get('cantidad', 1)}" 
-                        for item in session.cart
-                    ])
-                else:
-                    order_summary = "\n".join([
-                        f"• {d['item_nombre']} x{d['cantidad']} - ${d['subtotal']}" 
-                        for d in detalles
-                    ])
-                
-                # Mensaje de costo con desglose
-                mensaje_costo = f"""💵 DESGLOSE:
-🍽️ Subtotal: ${subtotal:.2f}
-🚗 Envío: ${costo_envio:.2f}"""
-                
-                delivery_config = obtener_info_delivery(restaurante_id)
-                if costo_envio == 0 and delivery_config and subtotal >= delivery_config.get('envio_gratis_desde', 999999):
-                    mensaje_costo += " ¡GRATIS! 🎉"
-                
-                mensaje_costo += f"\n💰 TOTAL: ${total:.2f}"
-                
-                send_notification_to_group("new_order", {
-                    "items": detalles if detalles else session.cart,
-                    "total": total,
-                    "order_number": numero_pedido
-                }, session)
-                
-                session.cart = []
-                
-                return f"""✅ ¡PEDIDO CONFIRMADO!
-
-🎫 Número de orden: {numero_pedido}
-
-👤 Cliente: {session.customer_name}
-📱 Teléfono: {session.customer_phone}
-📍 Dirección: {session.customer_address}
-
-📋 Tu pedido:
-{order_summary}
-
-{mensaje_costo}
-
-📞 Próximos pasos:
-1️⃣ Te contactaremos al: {session.customer_phone}
-2️⃣ Confirmaremos método de pago
-3️⃣ Prepararemos tu pedido
-4️⃣ ¡Te notificaremos cuando esté listo!
-
-⏱ Tiempo estimado: {RESTAURANT_CONFIG['delivery']['tiempo_estimado']}
-
-✅ Tu pedido ha sido guardado en nuestra base de datos
-
-¡Gracias por elegirnos!
-
-Escribe "menú" para hacer otro pedido."""
-            
-            except Exception as e:
-                print(f"❌ Error confirmando pedido: {e}")
-                import traceback
-                traceback.print_exc()
-                return "❌ Hubo un error al confirmar tu pedido. Por favor contacta al restaurante."
+            return confirmar_pedido_mejorado(session, restaurante_id)
 
         elif 'cancelar' in text_lower and 'pedido' in text_lower:
             session.cart = []
@@ -1255,30 +2221,7 @@ Tu carrito ha sido limpiado.
 Escribe "menú" para ver nuestras opciones."""
 
         elif 'carrito' in text_lower or 'pedido actual' in text_lower:
-            if len(session.cart) == 0:
-                return """🛒 Tu carrito está vacío
-
-Aún no has agregado productos.
-
-Escribe "menú" para ver nuestras opciones."""
-            
-            total = sum(item['precio'] * item.get('cantidad', 1) for item in session.cart)
-            
-            items_list = "\n".join([
-                f"• {item['nombre']} x{item.get('cantidad', 1)} - ${item['precio'] * item.get('cantidad', 1)}" 
-                for item in session.cart
-            ])
-            
-            return f"""🛒 Tu Carrito ({len(session.cart)} items)
-
-{items_list}
-
-💵 Total: ${total:.2f}
-
-Opciones:
-- Escribe "confirmar pedido" para finalizar
-- Escribe "menú" para agregar más items
-- Escribe "cancelar pedido" para limpiar"""
+            return formatear_resumen_carrito(session)
 
         elif any(word in text_lower for word in ['hola', 'buenas', 'hi', 'hello', 'buenos días', 'buenas tardes', 'buenas noches', 'buen día']):
             restaurante_info = obtener_info_contacto(restaurante_id)
@@ -1565,6 +2508,16 @@ def payment_cancel(slug):
 if __name__ == "__main__":
     print("=" * 60)
     print("🌐 Iniciando Servidor Web para Bot de Restaurante")
+    
+    # ✅ AGREGAR VERIFICACIÓN DE TIEMPOS
+    from database.database_multirestaurante import get_db_cursor
+    with get_db_cursor() as (cursor, conn):
+        cursor.execute("SELECT id FROM restaurantes WHERE estado = 'activo'")
+        restaurantes = cursor.fetchall()
+    
+    for rest in restaurantes:
+        verificar_tiempos_bd(rest['id'])
+    
     print("=" * 60)
     print("🔗 Servidor: http://localhost:5000/<slug>/")
     print("🤖 Bot de Telegram conectado")
@@ -1575,6 +2528,10 @@ if __name__ == "__main__":
     print("🕐 HORARIOS Y DELIVERY DINÁMICOS DESDE BD")
     print("🤖 NOTIFICACIONES TELEGRAM DINÁMICAS POR RESTAURANTE")
     print("💰 SISTEMA DE PAGOS PAYPAL INTEGRADO")
+    print("🍽️ SISTEMA DE CANTIDADES E INGREDIENTES MEJORADO")
+    print("🏪 3 TIPOS DE PEDIDO: Local, Para Llevar, Delivery")
+    print("🔍 BÚSQUEDA MEJORADA DE ITEMS E INGREDIENTES")
+    print("⏱ SISTEMA DE TIEMPOS ESTIMADOS DINÁMICOS")
     print("=" * 60)
     
     run_flask_server()

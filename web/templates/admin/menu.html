@@ -182,8 +182,8 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Ingredientes (uno por línea)</label>
-                        <textarea class="form-control" id="item_ingredientes" name="ingredientes" rows="3" placeholder="Tomate&#10;Queso mozzarella&#10;Albahaca"></textarea>
+                        <label class="form-label">Ingredientes (uno por línea o separados por comas)</label>
+                        <textarea class="form-control" id="item_ingredientes" name="ingredientes" rows="3" placeholder="Tomate&#10;Queso mozzarella&#10;Albahaca&#10;&#10;O también: Tomate, Queso mozzarella, Albahaca"></textarea>
                     </div>
                     <div class="row">
                         <div class="col-md-3 mb-3">
@@ -389,9 +389,37 @@ function guardarItem() {
     const formData = new FormData(form);
     const data = Object.fromEntries(formData);
     
-    // Convertir ingredientes de texto a array
+    // ✅ PROCESAMIENTO MEJORADO DE INGREDIENTES
     if (data.ingredientes) {
-        data.ingredientes = data.ingredientes.split('\n').filter(i => i.trim());
+        const ingredientesRaw = data.ingredientes.trim();
+        
+        // Separar por saltos de línea Y por comas
+        let ingredientesArray = [];
+        
+        // Primero separar por saltos de línea
+        const lineas = ingredientesRaw.split('\n');
+        
+        lineas.forEach(linea => {
+            // Luego separar cada línea por comas
+            const items = linea.split(',');
+            
+            items.forEach(item => {
+                const ingrediente = item.trim();
+                // Solo agregar si no está vacío
+                if (ingrediente && ingrediente.length > 0) {
+                    ingredientesArray.push(ingrediente);
+                }
+            });
+        });
+        
+        // Remover duplicados
+        ingredientesArray = [...new Set(ingredientesArray)];
+        
+        data.ingredientes = ingredientesArray;
+        
+        console.log('📝 Ingredientes procesados:', ingredientesArray);
+    } else {
+        data.ingredientes = [];
     }
     
     // Convertir checkboxes
