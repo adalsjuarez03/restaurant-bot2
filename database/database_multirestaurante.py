@@ -733,20 +733,32 @@ class DatabaseManager:
         """Crear pedido sin usar stored procedure"""
         try:
             with get_db_cursor() as (cursor, conn):
-                # Generar número de pedido único
-                numero_pedido = f"PED-{datetime.now().strftime('%Y%m%d%H%M%S')}-{random.randint(100, 999)}"
-                
+                # 1️⃣ Obtener el siguiente número de pedido para este restaurante
+                cursor.execute("""
+                    SELECT COALESCE(MAX(CAST(SUBSTRING(numero_pedido, 2) AS UNSIGNED)), 0) + 1 as siguiente
+                    FROM pedidos 
+                    WHERE restaurante_id = %s 
+                    AND numero_pedido REGEXP '^#[0-9]+$'
+                """, (restaurante_id,))
+            
+                resultado = cursor.fetchone()
+                siguiente_numero = resultado['siguiente'] if resultado else 1
+            
+                # 2️⃣ Generar número de pedido limpio: #001, #002, etc.
+                numero_pedido = f"#{siguiente_numero:04d}"  # #0001, #0002, etc.
+            
+                # 3️⃣ Insertar el pedido
                 cursor.execute("""
                     INSERT INTO pedidos 
                     (restaurante_id, cliente_id, numero_pedido, tipo_pedido, origen, estado, total, subtotal)
                     VALUES (%s, %s, %s, %s, %s, 'pendiente', 0, 0)
                 """, (restaurante_id, cliente_id, numero_pedido, tipo_pedido, origen))
-                
+            
                 conn.commit()
                 pedido_id = cursor.lastrowid
-                
-                print(f"✅ Pedido insertado - ID: {pedido_id}, Número: {numero_pedido}")
-                
+            
+                print(f"✅ Pedido creado - ID: {pedido_id}, Número: {numero_pedido}")
+            
                 return {
                     'pedido_id': pedido_id,
                     'numero_pedido': numero_pedido
